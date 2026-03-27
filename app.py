@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from harvester import harvest, StartupFinancials
-from scorer import score
-from compliance import check_compliance
+from harvester import StartupFinancials
+from scorer import score, ScoreResult
+from compliance import check_compliance, ComplianceResult
 
 st.set_page_config(
     page_title="Equiti-AI — Reg CF Scanner",
@@ -10,17 +10,20 @@ st.set_page_config(
     layout="wide",
 )
 
+# ── Styles ────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+    .block-container { padding-top: 2rem; }
+    .metric-label { font-size: 0.85rem !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown(
-    """
-    <h1 style='margin-bottom:0'>📈 Equiti-AI</h1>
-    <p style='color:gray;margin-top:0'>Reg CF Deal Intelligence · Safe Mode Active · Data only · Not investment advice</p>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("📈 Equiti-AI — Reg CF Deal Scanner")
+st.caption("Safe Mode Active · Data only · Not investment advice")
 st.divider()
 
-# ── Demo fixture (no network calls) ──────────────────────────────────────────
+# ── Demo fixture ──────────────────────────────────────────────────────────────
 DEMO_FINANCIALS = StartupFinancials(
     cik="0001234567",
     company_name="Acme AI (Demo)",
@@ -32,118 +35,98 @@ DEMO_FINANCIALS = StartupFinancials(
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("⚙️ Scan Settings")
-    offer_amount = st.number_input(
-        "Current Offer Amount ($)",
-        min_value=0,
-        max_value=5_000_000,
-        value=500_000,
-        step=25_000,
-    )
-    prior_revenues = st.number_input(
-        "Prior Year Revenue ($)",
-        min_value=0,
-        value=0,
-        step=10_000,
-        help="Used to calculate YoY revenue growth. Leave 0 to skip.",
-    )
-    st.divider()
+    st.header("⚙️ Settings")
     demo_mode = st.toggle("Demo Mode (no URL needed)", value=True)
-    st.caption("Demo mode uses sample data so you can explore the UI immediately.")
+    st.caption("Uses sample data so you can explore the UI instantly.")
     st.divider()
-    st.caption("Equiti-AI v0.1 · [GitHub](https://github.com/jordan742/Equiti-AI)")
+    offer_amount = st.number_input("Current Offer Amount ($)", min_value=0, max_value=5_000_000, value=500_000, step=25_000)
+    prior_revenues = st.number_input("Prior Year Revenue ($) — optional", min_value=0, value=0, step=10_000)
+    st.divider()
+    st.caption("Equiti-AI v0.1")
 
-# ── Main input ────────────────────────────────────────────────────────────────
+# ── URL input + button ────────────────────────────────────────────────────────
 col_input, col_btn = st.columns([4, 1])
 wefunder_url = col_input.text_input(
-    "Wefunder Campaign URL",
+    "url",
     placeholder="https://wefunder.com/company-name",
     disabled=demo_mode,
     label_visibility="collapsed",
 )
 generate = col_btn.button("Generate Memo", type="primary", use_container_width=True)
 
+# ── Gate: only run pipeline when button clicked ───────────────────────────────
 if not generate:
-    st.info("👆 Enter a Wefunder URL and click **Generate Memo**, or enable **Demo Mode** in the sidebar.")
-    st.stop()
-
-# ── Data pipeline ─────────────────────────────────────────────────────────────
-if demo_mode:
-    financials = DEMO_FINANCIALS
+    st.info("👆 Click **Generate Memo** — Demo Mode is ON so no URL is needed to start.")
 else:
-    if not wefunder_url.strip():
-        st.warning("Please enter a Wefunder campaign URL.")
-        st.stop()
-    with st.spinner("Fetching SEC Form C filing…"):
+    # ── Fetch data ────────────────────────────────────────────────────────
+    if demo_mode:
+        financials = DEMO_FINANCIALS
+    else:
+        if not wefunder_url.strip():
+            st.warning("Please enter a Wefunder campaign URL.")
+            st.stop()
+        with st.spinner("Fetching SEC Form C filing…"):
+            try:
+                from harvester import harvest
+                financials = harvest(wefunder_url.strip())
+            except Exception as e:
+                st.error(f"**Harvest failed:** {e}")
+                st.stop()
+
+    with st.spinner("Running compliance check…"):
         try:
-            financials = harvest(wefunder_url.strip())
+            compliance: ComplianceResult = check_compliance(financials.cik, float(offer_amount))
         except Exception as e:
-            st.error(f"**Harvest failed:** {e}")
+            st.error(f"**Compliance check failed:** {e}")
             st.stop()
 
-with st.spinner("Running compliance check…"):
-    try:
-        compliance = check_compliance(financials.cik, float(offer_amount))
-    except Exception as e:
-        st.error(f"**Compliance check failed:** {e}")
-        st.stop()
+    with st.spinner("Scoring…"):
+        result: ScoreResult = score(financials, prior_revenues=prior_revenues or None)
 
-with st.spinner("Scoring financials…"):
-    result = score(financials, prior_revenues=prior_revenues or None)
+    # ── Layout ────────────────────────────────────────────────────────────
+    left, right = st.columns([3, 2], gap="large")
 
-# ── Layout: two columns ───────────────────────────────────────────────────────
-left, right = st.columns([3, 2], gap="large")
+    with left:
+        st.subheader(financials.company_name or f"CIK {financials.cik}")
+        if demo_mode:
+            st.caption("⚡ Demo data — toggle off Demo Mode to scan a real deal.")
 
-with left:
-    # ── Company name ──────────────────────────────────────────────────────
-    st.subheader(financials.company_name or f"CIK {financials.cik}")
-    if demo_mode:
-        st.caption("⚡ Demo data — toggle off Demo Mode and enter a real URL to scan live deals.")
+        # Compliance
+        used_pct = compliance.combined_total / 5_000_000 * 100
+        if compliance.compliant:
+            st.success(f"✅ **Reg CF Compliance: PASS** — ${compliance.combined_total:,.0f} of $5,000,000 cap used ({used_pct:.1f}%)")
+        else:
+            st.warning(f"⚠️ **Reg CF Compliance: FAIL** — ${compliance.combined_total:,.0f} exceeds the $5,000,000 annual cap.")
+        st.progress(min(used_pct / 100, 1.0))
 
-    # ── Compliance ────────────────────────────────────────────────────────
-    used_pct = compliance.combined_total / 5_000_000 * 100
-    if compliance.compliant:
-        st.success(
-            f"✅ **Reg CF Compliance: PASS** — "
-            f"${compliance.combined_total:,.0f} of $5,000,000 cap used ({used_pct:.1f}%)"
+        st.divider()
+
+        # Score metrics
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Health Score", f"{result.score:.1f} / 10")
+        m2.metric(
+            "Cash Runway",
+            f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
+            delta="⚠ Low" if result.runway_months and result.runway_months < 6 else None,
+            delta_color="inverse",
         )
-    else:
-        st.warning(
-            f"⚠️ **Reg CF Compliance: FAIL** — "
-            f"${compliance.combined_total:,.0f} exceeds the $5,000,000 annual cap."
+        m3.metric(
+            "YoY Revenue Growth",
+            f"{result.revenue_growth_pct:.1f}%" if result.revenue_growth_pct is not None else "N/A",
         )
 
-    st.progress(min(used_pct / 100, 1.0))
+        st.divider()
+        st.subheader("Investment Thesis")
+        st.info(result.investment_thesis)
 
-    # ── Score metrics ─────────────────────────────────────────────────────
-    st.divider()
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Health Score", f"{result.score:.1f} / 10")
-    m2.metric(
-        "Cash Runway",
-        f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
-        delta="⚠ Low" if result.runway_months and result.runway_months < 6 else None,
-        delta_color="inverse",
-    )
-    m3.metric(
-        "YoY Revenue Growth",
-        f"{result.revenue_growth_pct:.1f}%" if result.revenue_growth_pct is not None else "N/A",
-    )
+    with right:
+        # Balance sheet
+        st.subheader("Balance Sheet (Form C)")
 
-    # ── Investment thesis ─────────────────────────────────────────────────
-    st.divider()
-    st.subheader("Investment Thesis")
-    st.info(result.investment_thesis)
+        def fmt(val):
+            return f"${val:,.0f}" if val is not None else "N/A"
 
-with right:
-    # ── Balance sheet table ───────────────────────────────────────────────
-    st.subheader("Balance Sheet (Form C)")
-
-    def fmt(val, prefix="$"):
-        return f"{prefix}{val:,.0f}" if val is not None else "N/A"
-
-    balance_df = pd.DataFrame(
-        {
+        balance_df = pd.DataFrame({
             "Metric": ["Cash", "Revenues", "Net Income", "Short-Term Debt", "Debt Ratio"],
             "Value": [
                 fmt(financials.cash),
@@ -152,38 +135,32 @@ with right:
                 fmt(financials.short_term_debt),
                 f"{result.debt_ratio:.4f}" if result.debt_ratio is not None else "N/A",
             ],
-        }
-    ).set_index("Metric")
+        }).set_index("Metric")
+        st.table(balance_df)
 
-    st.table(balance_df)
-
-    # ── Deal memo card ────────────────────────────────────────────────────
-    st.subheader("Deal Memo")
-    compliance_label = "PASS ✅" if compliance.compliant else "FAIL ⚠️"
-    key_risk = result.investment_thesis.split(". ")[-1].strip().rstrip(".")
-
-    st.markdown(
-        f"""
+        # Deal memo card
+        st.subheader("Deal Memo")
+        compliance_label = "PASS ✅" if compliance.compliant else "FAIL ⚠️"
+        key_risk = result.investment_thesis.split(". ")[-1].strip().rstrip(".")
+        st.markdown(f"""
 | Field | Detail |
 |:---|:---|
 | **Deal Name** | {financials.company_name or financials.cik} |
 | **Health Score** | {result.score:.1f} / 10 |
 | **Compliance** | {compliance_label} |
 | **Key Risk** | {key_risk}. |
-"""
-    )
+""")
 
-    # ── Compliance detail ─────────────────────────────────────────────────
-    with st.expander("Compliance Detail"):
-        st.json({
-            "cik": compliance.cik,
-            "status": compliance.status,
-            "filings_found_12m": compliance.filing_count,
-            "total_raised_12m": f"${compliance.total_raised_12m:,.0f}",
-            "current_offer": f"${compliance.current_offer_amount:,.0f}",
-            "combined_total": f"${compliance.combined_total:,.0f}",
-            "reg_cf_cap": "$5,000,000",
-        })
+        with st.expander("Compliance Detail"):
+            st.json({
+                "cik": compliance.cik,
+                "status": compliance.status,
+                "filings_found_12m": compliance.filing_count,
+                "total_raised_12m": f"${compliance.total_raised_12m:,.0f}",
+                "current_offer": f"${compliance.current_offer_amount:,.0f}",
+                "combined_total": f"${compliance.combined_total:,.0f}",
+                "reg_cf_cap": "$5,000,000",
+            })
 
-st.divider()
-st.caption("Equiti-AI · Safe Mode Active · Data only · Not investment advice · Built for retail investors")
+    st.divider()
+    st.caption("Equiti-AI · Safe Mode · Data only · Not investment advice")
