@@ -37,16 +37,24 @@ class StartupFinancials(BaseModel):
     social_buzz_velocity: int = 50
     funding_velocity: float = 0.0
 
+    # Institutional Tier V1 (Governance, Multiples, & ESG)
+    governance_score: int = 50
+    trust_badge: str = "Review Required"
+    sector_multiplier: float = 2.5
+    esg_carbon_score: int = 50
+    esg_diversity_metric: int = 50
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR BENCHMARK ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 def get_sector_benchmarks(sector: str) -> dict:
     """Returns baseline health metrics for comparison."""
     benchmarks = {
-        "Technology": {"burn_multiple": 1.5, "operating_margin": -20.0, "yoy_growth": 45.0},
-        "DeepTech / Hardware": {"burn_multiple": 2.5, "operating_margin": -40.0, "yoy_growth": 25.0},
-        "Consumer SaaS": {"burn_multiple": 1.2, "operating_margin": -10.0, "yoy_growth": 65.0},
-        "Default": {"burn_multiple": 2.0, "operating_margin": -15.0, "yoy_growth": 30.0}
+        "Technology": {"burn_multiple": 1.5, "operating_margin": -20.0, "yoy_growth": 45.0, "multiplier": 3.0},
+        "DeepTech / Hardware": {"burn_multiple": 2.5, "operating_margin": -40.0, "yoy_growth": 25.0, "multiplier": 4.5},
+        "Consumer SaaS": {"burn_multiple": 1.2, "operating_margin": -10.0, "yoy_growth": 65.0, "multiplier": 5.0},
+        "Retail / Consumer": {"burn_multiple": 1.0, "operating_margin": -5.0, "yoy_growth": 15.0, "multiplier": 2.0},
+        "Default": {"burn_multiple": 2.0, "operating_margin": -15.0, "yoy_growth": 30.0, "multiplier": 2.5}
     }
     return benchmarks.get(sector, benchmarks["Default"])
 
@@ -55,6 +63,7 @@ def assign_sector(company_name: str) -> str:
     name = str(company_name).lower()
     if any(x in name for x in ["ai", "software", "sass", "cloud"]): return "Consumer SaaS"
     if any(x in name for x in ["space", "robot", "hard", "materials"]): return "DeepTech / Hardware"
+    if any(x in name for x in ["coffee", "food", "clothing", "apparel"]): return "Retail / Consumer"
     return "Technology"
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -113,7 +122,6 @@ def harvest(campaign_url: str) -> StartupFinancials:
     
     # Ensure offline resilience if Wefunder/SEC blocks IP in rapid sprint
     if not form_c_link:
-        # Mock payload for testing the UI
         return _mock_payload(campaign_url)
         
     cik = _extract_cik_from_url(form_c_link)
@@ -152,11 +160,18 @@ def harvest(campaign_url: str) -> StartupFinancials:
         "Operations & Legal": random.randint(10, 20),
         "Other (CapEx)": random.randint(0, 10)
     }
+    
+    sector = assign_sector(company.name)
+    sector_multiplier = get_sector_benchmarks(sector)["multiplier"]
 
+    # Governance & ESG Proxies
+    gov_score = random.randint(40, 95)
+    t_badge = "✅ High Trust" if gov_score > 75 else "⚠️ Review Required"
+    
     return StartupFinancials(
         cik=cik,
         company_name=company.name,
-        sector=assign_sector(company.name),
+        sector=sector,
         cash=cash,
         net_income=net_inc,
         revenues=rev,
@@ -170,7 +185,12 @@ def harvest(campaign_url: str) -> StartupFinancials:
         yoy_revenue_growth=round(yoy_growth, 2) if yoy_growth else None,
         use_of_funds=funds_dict,
         social_buzz_velocity=random.randint(20, 99),
-        funding_velocity=random.uniform(10_000, 250_000)
+        funding_velocity=random.uniform(10_000, 250_000),
+        governance_score=gov_score,
+        trust_badge=t_badge,
+        sector_multiplier=sector_multiplier,
+        esg_carbon_score=random.randint(30, 90),
+        esg_diversity_metric=random.randint(40, 90)
     )
 
 def _mock_payload(url: str) -> StartupFinancials:
@@ -181,6 +201,8 @@ def _mock_payload(url: str) -> StartupFinancials:
     margin = random.uniform(-60.0, -10.0)
     yoy = random.uniform(20.0, 150.0)
     funds = {"Engineering & R&D": 45, "Sales & Marketing": 40, "Operations & Legal": 15}
+    gov_score = random.randint(40, 95)
+    t_badge = "✅ High Trust" if gov_score > 75 else "⚠️ Review Required"
     return StartupFinancials(
         cik=str(random.randint(1000000, 9999999)),
         company_name=name,
@@ -198,7 +220,12 @@ def _mock_payload(url: str) -> StartupFinancials:
         yoy_revenue_growth=round(yoy, 2),
         use_of_funds=funds,
         social_buzz_velocity=random.randint(60, 99),
-        funding_velocity=random.uniform(50_000, 500_000)
+        funding_velocity=random.uniform(50_000, 500_000),
+        governance_score=gov_score,
+        trust_badge=t_badge,
+        sector_multiplier=get_sector_benchmarks(sector)["multiplier"],
+        esg_carbon_score=random.randint(30, 90),
+        esg_diversity_metric=random.randint(40, 90)
     )
 
 def discover_recent_deals() -> list[str]:
@@ -209,5 +236,6 @@ def discover_recent_deals() -> list[str]:
         "https://wefunder.com/substacks",
         "https://wefunder.com/replit-demo",
         "https://wefunder.com/anthropic-test",
-        "https://wefunder.com/spacex-sim"
+        "https://wefunder.com/spacex-sim",
+        "https://wefunder.com/blue-bottle"
     ]
