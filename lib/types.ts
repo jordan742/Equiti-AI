@@ -23,28 +23,9 @@ export interface Company {
   quarterlyCash: number[];
   quarterlyCustomers: number[];
   quarterLabels: string[];
-  xbrl: {
-    assets: number;
-    liabilities: number;
-    equity: number;
-    revenueTTM: number;
-    netIncome: number;
-  };
+  xbrl: { assets: number; liabilities: number; equity: number; revenueTTM: number; netIncome: number; };
   risks: string[];
   useOfProceeds: Record<string, number>;
-  ai: {
-    verdict: string;
-    conviction: "HIGH" | "MODERATE" | "LOW";
-    risk: number; // 1-5
-    plainEnglish: string;
-    summary: string;
-    bull: string;
-    bear: string;
-  };
-  market: {
-    ask: number;
-    bid: number;
-    vol: number;
-    trades: number;
-  };
+  ai: { verdict: string; conviction: "HIGH" | "MODERATE" | "LOW"; risk: number; plainEnglish: string; summary: string; bull: string; bear: string; };
+  market: { ask: number; bid: number; vol: number; trades: number; };
 }

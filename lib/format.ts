@@ -4,11 +4,7 @@ export function fm(n: number, compact = false): string {
     if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
     return `$${n.toFixed(0)}`;
   }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(n);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 }
 
 export function pct(n: number, decimals = 1): string {

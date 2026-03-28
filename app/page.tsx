@@ -25,16 +25,15 @@ export default function Home() {
   const filtered = COMPANIES
     .filter(c => !query || c.name.toLowerCase().includes(query.toLowerCase()) || c.id.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => {
-      if (sort === "Score")   return calcScore(b) - calcScore(a);
-      if (sort === "Runway")  return (b.cash / b.burn) - (a.cash / a.burn);
-      if (sort === "Raised")  return b.raised - a.raised;
-      if (sort === "Growth")  return b.growth - a.growth;
+      if (sort === "Score")  return calcScore(b) - calcScore(a);
+      if (sort === "Runway") return (b.cash / b.burn) - (a.cash / a.burn);
+      if (sort === "Raised") return b.raised - a.raised;
+      if (sort === "Growth") return b.growth - a.growth;
       return 0;
     });
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#0a0e17" }}>
-      {/* Header */}
       <header className="px-4 py-3 flex items-center justify-between" style={{ background: "#0f1520", borderBottom: "1px solid #1b2540" }}>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -43,58 +42,39 @@ export default function Home() {
             </div>
             <span className="font-mono font-bold text-sm" style={{ color: "#f0f4ff" }}>VisionScope</span>
           </div>
-          <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: "#00d4aa22", color: "#00d4aa", border: "1px solid #00d4aa44" }}>
-            ● LIVE
-          </span>
+          <span className="font-mono text-xs px-2 py-0.5 rounded" style={{ background: "#00d4aa22", color: "#00d4aa", border: "1px solid #00d4aa44" }}>● LIVE</span>
         </div>
-        <div className="font-mono text-xs px-2 py-1 rounded" style={{ background: "#ff475722", color: "#ff4757", border: "1px solid #ff475744" }}>
-          NOT FINANCIAL ADVICE
-        </div>
+        <div className="font-mono text-xs px-2 py-1 rounded" style={{ background: "#ff475722", color: "#ff4757", border: "1px solid #ff475744" }}>NOT FINANCIAL ADVICE</div>
       </header>
 
-      {/* Market ticker */}
       <div className="overflow-hidden py-1.5" style={{ background: "#060d18", borderBottom: "1px solid #1b2540" }}>
         <div className="ticker-track flex gap-8 whitespace-nowrap" style={{ width: "max-content" }}>
           {[...TICKER_ITEMS, ...TICKER_ITEMS].map((item, i) => (
-            <span key={i} className="font-mono text-xs" style={{ color: "#4e5f7d" }}>
-              {item}
-            </span>
+            <span key={i} className="font-mono text-xs" style={{ color: "#4e5f7d" }}>{item}</span>
           ))}
         </div>
       </div>
 
-      {/* Tab nav */}
       <nav className="px-4 flex gap-1 py-2" style={{ background: "#0f1520", borderBottom: "1px solid #1b2540" }}>
         {(["Screener", "Marketplace"] as Tab[]).map(t => (
           <button key={t} onClick={() => { setTab(t); setDetail(null); }}
             className="px-4 py-1.5 rounded-lg font-mono text-xs font-bold transition-all"
-            style={{
-              background: tab === t ? "#1b2540" : "transparent",
-              color: tab === t ? "#f0f4ff" : "#4e5f7d",
-              border: `1px solid ${tab === t ? "#2e6cf644" : "transparent"}`,
-            }}>
+            style={{ background: tab === t ? "#1b2540" : "transparent", color: tab === t ? "#f0f4ff" : "#4e5f7d", border: `1px solid ${tab === t ? "#2e6cf644" : "transparent"}` }}>
             {t}
           </button>
         ))}
       </nav>
 
-      {/* Main content */}
       <main className="flex-1 px-4 py-4 max-w-5xl mx-auto w-full">
         {tab === "Screener" && (
           detail ? (
             <CompanyDetail company={detail} onBack={() => setDetail(null)} />
           ) : (
             <div className="flex flex-col gap-4">
-              {/* Search + sort */}
               <div className="flex gap-3 flex-wrap">
-                <input
-                  type="text"
-                  placeholder="Search by name or ticker..."
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
+                <input type="text" placeholder="Search by name or ticker..." value={query} onChange={e => setQuery(e.target.value)}
                   className="flex-1 rounded-xl px-4 py-2.5 font-mono text-sm outline-none min-w-48"
-                  style={{ background: "#0f1520", border: "1px solid #1b2540", color: "#f0f4ff" }}
-                />
+                  style={{ background: "#0f1520", border: "1px solid #1b2540", color: "#f0f4ff" }} />
                 <div className="flex gap-1 rounded-xl p-1" style={{ background: "#0f1520", border: "1px solid #1b2540" }}>
                   {(["Score", "Runway", "Raised", "Growth"] as const).map(s => (
                     <button key={s} onClick={() => setSort(s)}
@@ -105,12 +85,8 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-
-              {/* Company cards */}
               <div className="flex flex-col gap-3">
-                {filtered.map(c => (
-                  <CompanyCard key={c.id} company={c} onClick={() => setDetail(c)} />
-                ))}
+                {filtered.map(c => <CompanyCard key={c.id} company={c} onClick={() => setDetail(c)} />)}
                 {filtered.length === 0 && (
                   <div className="rounded-xl p-8 text-center" style={{ background: "#0f1520", border: "1px solid #1b2540" }}>
                     <span className="font-mono text-sm" style={{ color: "#4e5f7d" }}>No deals match your search.</span>
@@ -120,7 +96,6 @@ export default function Home() {
             </div>
           )
         )}
-
         {tab === "Marketplace" && <Marketplace />}
       </main>
 
