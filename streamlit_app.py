@@ -45,45 +45,69 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
-  html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
+  @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+  
+  html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
+  code, pre { font-family: 'JetBrains Mono', monospace; }
 
+  /* Midnight Navy Theme overrides */
+  div.stApp {
+    background-color: #0a192f;
+  }
+  
   .terminal-hdr {
-    background: linear-gradient(135deg, #060a14 0%, #0c1a3a 100%);
-    border: 1px solid #0066cc; border-radius: 10px;
+    background: linear-gradient(135deg, #0a192f 0%, #000000 100%);
+    border: 1px solid #1e2d40; border-radius: 8px;
     padding: 1.5rem 2rem; margin-bottom: 1.2rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.5);
   }
-  .terminal-hdr h1 { color: #0099ff; margin:0; font-size:1.5rem; letter-spacing:3px; }
-  .terminal-hdr p  { color: #4a90d9; margin:0.3rem 0 0; font-size:0.72rem; letter-spacing:1px; }
+  .terminal-hdr h1 { color: #00f2fe; margin:0; font-size:1.6rem; letter-spacing:2px; font-weight: 700; text-transform: uppercase; }
+  .terminal-hdr p  { color: #60a5fa; margin:0.3rem 0 0; font-size:0.8rem; letter-spacing:1px; }
 
-  .diag-ok   { color:#00cc66; font-weight:600; }
-  .diag-fail { color:#ff4444; font-weight:600; }
+  .diag-ok   { color:#00ff00; font-weight:700; }
+  .diag-fail { color:#ff003c; font-weight:700; }
 
-  div[data-testid="metric-container"] {
-    background: #111827; border:1px solid #1e3a5f;
-    border-radius:8px; padding:0.9rem;
+  /* High-Contrast Borders on elements */
+  div[data-testid="stContainer"] > div {
+    background: #000000;
+    border: 1px solid #1e2d40;
+    border-radius: 8px;
+    padding: 0.5rem;
   }
-  div[data-testid="metric-container"] label { color:#4a9eff !important; letter-spacing:1px; }
+  
+  /* Metric overrides */
+  div[data-testid="stMetric"] label { color: #60a5fa !important; letter-spacing: 0.5px; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; }
+  div[data-testid="stMetric"] div { color: #ffffff !important; font-size: 1.8rem; font-weight: 300; }
+
+  /* Mobile 'Quick Look' Responsiveness */
+  @media (max-width: 768px) {
+    div[data-testid="stVerticalBlock"] > div[data-testid="column"] { 
+        width: 100% !important; 
+        min-width: 100% !important; 
+        flex: 1 1 100% !important; 
+    }
+  }
 
   .signal-badge {
     display:inline-block; padding:0.45rem 1.2rem; border-radius:6px;
     font-weight:700; font-size:0.95rem; letter-spacing:2px; text-align:center;
   }
-  .badge-bull { background:#052e16; border:1px solid #22c55e; color:#4ade80; }
+  .badge-bull { background:#052e16; border:1px solid #00ff00; color:#00ff00; }
   .badge-neut { background:#422006; border:1px solid #f59e0b; color:#fbbf24; }
-  .badge-bear { background:#450a0a; border:1px solid #ef4444; color:#f87171; }
+  .badge-bear { background:#450a0a; border:1px solid #ff003c; color:#ff003c; }
 
   .investor-card {
-    background:#0f172a; border:1px solid #1e40af; border-radius:8px;
-    padding:1rem 1.2rem; margin-top:0.5rem;
+    background: #0a192f; border: 1px solid #1e2d40; border-radius: 6px;
+    padding: 1rem 1.2rem; margin-top: 0.5rem;
   }
-  .investor-card h4 { color:#60a5fa; margin:0 0 0.4rem; font-size:0.85rem; }
-  .investor-card .limit { color:#34d399; font-size:1.4rem; font-weight:700; }
+  .investor-card h4 { color: #60a5fa; margin: 0 0 0.4rem; font-size: 0.85rem; text-transform: uppercase; }
+  .investor-card .limit { color: #00f2fe; font-size: 1.6rem; font-weight: 700; }
 
   .disclaimer-box {
-    background:#0d1117; border:1px solid #333; border-left:4px solid #0066cc;
-    border-radius:4px; padding:1rem 1.2rem; font-size:0.7rem;
-    color:#6b7280; line-height:1.65; margin-top:2rem;
+    background: #000000; border: 1px solid #1e2d40; border-left: 4px solid #1e2d40;
+    border-radius: 4px; padding: 1rem 1.2rem; font-size: 0.75rem;
+    color: #94a3b8; line-height: 1.65; margin-top: 2rem;
   }
 </style>
 """, unsafe_allow_html=True)
@@ -217,14 +241,48 @@ def build_cash_burn_chart(cash: float, monthly_burn: float, months: int = 18) ->
 
     fig.update_layout(
         template="plotly_dark",
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
-        title=dict(text="PROJECTED CASH BURN", font=dict(size=14, color="#4a9eff", family="JetBrains Mono")),
-        yaxis=dict(title="Cash Balance ($)", tickprefix="$", tickformat=",", gridcolor="#1e293b"),
-        xaxis=dict(gridcolor="#1e293b"),
+        paper_bgcolor="#0a192f",
+        plot_bgcolor="#0a192f",
+        title=dict(text="PROJECTED CASH BURN", font=dict(size=14, color="#4a9eff", family="Roboto")),
+        yaxis=dict(title="Cash Balance ($)", tickprefix="$", tickformat=",", gridcolor="#1e2d40"),
+        xaxis=dict(gridcolor="#1e2d40"),
         height=340,
         margin=dict(l=60, r=20, t=50, b=40),
         showlegend=False,
+    )
+    return fig
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LIQUIDITY SCORE GAUGE CHART
+# ═══════════════════════════════════════════════════════════════════════════════
+def build_liquidity_gauge(score: float) -> go.Figure:
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = score,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': "Liquidity Score", 'font': {'size': 18, 'color': '#00f2fe', 'family': 'Roboto'}},
+        gauge = {
+            'axis': {'range': [None, 10], 'tickwidth': 1, 'tickcolor': "#1e2d40"},
+            'bar': {'color': "#00f2fe"},
+            'bgcolor': "#000000",
+            'borderwidth': 2,
+            'bordercolor': "#1e2d40",
+            'steps': [
+                {'range': [0, 4], 'color': '#ff003c'},
+                {'range': [4, 7], 'color': '#fbbf24'},
+                {'range': [7, 10], 'color': '#00ff00'}],
+            'threshold': {
+                'line': {'color': "#ffffff", 'width': 4},
+                'thickness': 0.75,
+                'value': score}
+        }
+    ))
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0a192f",
+        plot_bgcolor="#0a192f",
+        height=300,
+        margin=dict(l=20, r=20, t=50, b=20)
     )
     return fig
 
@@ -470,21 +528,29 @@ else:
 
     # ── METRIC CARDS ───────────────────────────────────────────────────────
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Health Score", f"{result.score:.1f} / 10")
-    m2.metric(
-        "Cash Runway",
-        f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
-        delta="LOW" if result.runway_months and result.runway_months < 6 else None,
-        delta_color="inverse",
-    )
-    m3.metric(
-        "Min Investment",
-        f"${financials.min_investment:,.0f}" if financials.min_investment else "N/A",
-    )
-    m4.metric(
-        "Your Reg CF Limit",
-        f"${inv_limit:,.0f}",
-    )
+    with m1:
+        with st.container(border=True):
+            st.metric("Health Score", f"{result.score:.1f} / 10")
+    with m2:
+        with st.container(border=True):
+            st.metric(
+                "Cash Runway",
+                f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
+                delta="LOW" if result.runway_months and result.runway_months < 6 else None,
+                delta_color="inverse",
+            )
+    with m3:
+        with st.container(border=True):
+            st.metric(
+                "Min Investment",
+                f"${financials.min_investment:,.0f}" if financials.min_investment else "N/A",
+            )
+    with m4:
+        with st.container(border=True):
+            st.metric(
+                "Your Reg CF Limit",
+                f"${inv_limit:,.0f}",
+            )
 
     st.markdown("---")
 
@@ -525,25 +591,23 @@ else:
         def fmt(v):
             return f"${v:,.0f}" if v is not None else "—"
 
-        bs_df = pd.DataFrame({
-            "Line Item": [
-                "Cash & Equivalents",
-                "Total Revenues",
-                "Net Income / (Loss)",
-                "Short-Term Debt",
-                "Debt / Revenue Ratio",
-                "Monthly Burn Rate",
-            ],
-            "Amount": [
-                fmt(financials.cash),
-                fmt(financials.revenues),
-                fmt(financials.net_income),
-                fmt(financials.short_term_debt),
-                f"{result.debt_ratio:.4f}" if result.debt_ratio else "—",
-                fmt(abs(financials.net_income) / 12) if financials.net_income and financials.net_income < 0 else "—",
-            ],
-        })
-        st.dataframe(bs_df, use_container_width=True, hide_index=True)
+        bs1, bs2 = st.columns(2)
+        with bs1:
+            with st.container(border=True):
+                st.metric("Cash & Equivalents", fmt(financials.cash))
+            with st.container(border=True):
+                st.metric("Net Income / (Loss)", fmt(financials.net_income))
+            with st.container(border=True):
+                st.metric("Debt / Revenue", f"{result.debt_ratio:.4f}" if result.debt_ratio else "—")
+        with bs2:
+            with st.container(border=True):
+                st.metric("Total Revenues", fmt(financials.revenues))
+            with st.container(border=True):
+                st.metric("Short-Term Debt", fmt(financials.short_term_debt))
+            with st.container(border=True):
+                st.metric("Monthly Burn Rate", fmt(abs(financials.net_income) / 12) if financials.net_income and financials.net_income < 0 else "—")
+        
+        st.plotly_chart(build_liquidity_gauge(result.score), use_container_width=True)
 
         # Revenue Growth metric
         if result.revenue_growth_pct is not None:
