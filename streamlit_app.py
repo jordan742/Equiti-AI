@@ -25,9 +25,10 @@ APP_VERSION    = "2.0.0"
 
 set_identity(SEC_IDENTITY)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# PAGE CONFIG
-# ═══════════════════════════════════════════════════════════════════════════════
+if "view_mode" not in st.session_state: st.session_state.view_mode = "grid"
+if "active_deal" not in st.session_state: st.session_state.active_deal = None
+if "deals_cache" not in st.session_state: st.session_state.deals_cache = {}
+
 st.set_page_config(
     page_title="Equiti-AI v2 | Institutional Terminal",
     page_icon="📈",
@@ -85,6 +86,14 @@ st.markdown("""
     border-radius:4px; padding:1rem 1.2rem; font-size:0.7rem;
     color:#6b7280; line-height:1.65; margin-top:2rem;
   }
+  .stButton > button:hover { background-color: #333333 !important; }
+  
+  /* Global Metrics */
+  div[data-testid="stMetric"] label { color: #666666 !important; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+  div[data-testid="stMetric"] div { color: #000000 !important; font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; }
+  
+  /* Sidebar Footer */
+  .sidebar-footer { position: fixed; left: 0; bottom: 0; width: inherit; padding: 1rem; border-top: 1px solid #E5E5E5; font-size: 10px; color: #666666; background: #F9F9F9; z-index: 1000; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,7 +108,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONNECTION DIAGNOSTIC
+# MOCK GENERATORS / HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.expander("CONNECTION DIAGNOSTIC", expanded=True):
     d1, d2, d3 = st.columns(3)
@@ -136,13 +145,6 @@ class StartupFinancials(BaseModel):
     revenues: Optional[float] = None
     short_term_debt: Optional[float] = None
     min_investment: Optional[float] = None
-
-class ScoreResult(BaseModel):
-    score: float
-    runway_months: Optional[float] = None
-    debt_ratio: Optional[float] = None
-    revenue_growth_pct: Optional[float] = None
-    investment_thesis: str
 
 class ComplianceResult(BaseModel):
     compliant: bool
