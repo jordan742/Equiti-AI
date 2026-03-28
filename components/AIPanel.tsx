@@ -11,14 +11,11 @@ export default function AIPanel({ company: c }: { company: Company }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Verdict banner */}
       <div className="rounded-xl p-4" style={{ background: "#0f1520", border: "1px solid #1b2540" }}>
         <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <div>
             <span className="font-mono text-xs" style={{ color: "#8594b0" }}>AI VERDICT — </span>
-            <span className="font-semibold text-base" style={{ color: "#f0f4ff", fontFamily: "'Instrument Serif', serif" }}>
-              {c.ai.verdict}
-            </span>
+            <span className="font-semibold text-base" style={{ color: "#f0f4ff", fontFamily: "'Instrument Serif', serif" }}>{c.ai.verdict}</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
@@ -32,8 +29,7 @@ export default function AIPanel({ company: c }: { company: Company }) {
               <span className="font-mono text-xs" style={{ color: "#8594b0" }}>RISK</span>
               <div className="flex gap-0.5">
                 {[1,2,3,4,5].map(i => (
-                  <div key={i} className="w-2.5 h-2.5 rounded-sm"
-                    style={{ background: i <= c.ai.risk ? "#ff4757" : "#1b2540" }} />
+                  <div key={i} className="w-2.5 h-2.5 rounded-sm" style={{ background: i <= c.ai.risk ? "#ff4757" : "#1b2540" }} />
                 ))}
               </div>
             </div>
@@ -42,7 +38,6 @@ export default function AIPanel({ company: c }: { company: Company }) {
         <p className="text-sm leading-relaxed" style={{ color: "#c4cde0" }}>{c.ai.summary}</p>
       </div>
 
-      {/* Plain English */}
       <div className="rounded-xl p-4" style={{ background: "#06b6d411", border: "1px solid #06b6d422" }}>
         <div className="font-mono text-xs font-bold mb-2 flex items-center gap-2" style={{ color: "#06b6d4" }}>
           <span>ℹ</span> IN PLAIN ENGLISH
@@ -50,7 +45,6 @@ export default function AIPanel({ company: c }: { company: Company }) {
         <p className="text-sm leading-relaxed" style={{ color: "#c4cde0" }}>{c.ai.plainEnglish}</p>
       </div>
 
-      {/* Bull / Bear */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="rounded-xl p-4" style={{ background: "#00d4aa0d", border: "1px solid #00d4aa22" }}>
           <div className="font-mono text-xs font-bold mb-2" style={{ color: "#00d4aa" }}>▲ BULL CASE</div>
@@ -62,12 +56,10 @@ export default function AIPanel({ company: c }: { company: Company }) {
         </div>
       </div>
 
-      {/* Revenue vs Burn chart */}
       <SectionBox title="Revenue vs Burn" tag="Quarterly">
         <RevenueChart company={c} />
       </SectionBox>
 
-      {/* Cash runway gauge */}
       <div className="rounded-xl p-4 flex items-center gap-6" style={{ background: "#0f1520", border: "1px solid #1b2540" }}>
         <Gauge value={runway} max={24} label="mo runway" />
         <div>

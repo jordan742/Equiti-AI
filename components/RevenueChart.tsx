@@ -26,15 +26,11 @@ export default function RevenueChart({ company: c }: { company: Company }) {
           </defs>
           <CartesianGrid vertical={false} stroke="#1b2540" strokeDasharray="3 3" />
           <XAxis dataKey="q" tick={{ fill: "#4e5f7d", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fill: "#4e5f7d", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false}
-            tickFormatter={(v) => fm(v, true)} width={52} />
-          <Tooltip
-            contentStyle={{ background: "#131a28", border: "1px solid #1b2540", borderRadius: 8, fontFamily: "JetBrains Mono", fontSize: 11 }}
-            labelStyle={{ color: "#c4cde0" }}
-            formatter={(v: number, name: string) => [fm(v), name]}
-          />
+          <YAxis tick={{ fill: "#4e5f7d", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} tickFormatter={(v) => fm(v, true)} width={52} />
+          <Tooltip contentStyle={{ background: "#131a28", border: "1px solid #1b2540", borderRadius: 8, fontFamily: "JetBrains Mono", fontSize: 11 }}
+            labelStyle={{ color: "#c4cde0" }} formatter={(v: number, name: string) => [fm(v), name]} />
           <Area type="monotone" dataKey="Revenue" stroke="#00d4aa" strokeWidth={2} fill="url(#revGrad)" dot={false} />
-          <Area type="monotone" dataKey="Burn"    stroke="#ff4757" strokeWidth={2} fill="url(#burnGrad)" dot={false} />
+          <Area type="monotone" dataKey="Burn" stroke="#ff4757" strokeWidth={2} fill="url(#burnGrad)" dot={false} />
         </AreaChart>
       </ResponsiveContainer>
       <div className="flex gap-4 mt-2 justify-center">
