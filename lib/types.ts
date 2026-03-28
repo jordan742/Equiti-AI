@@ -4,80 +4,47 @@ export interface Company {
   sector: string;
   stage: string;
   platform: string;
+  location: string;
   status: "Live" | "Closed";
+  security: "SAFE" | "Preferred Equity";
+  pricePerShare: number;
   raised: number;
   target: number;
   valuationCap: number;
-  pricePerShare: number;
-  securityType: "SAFE" | "Preferred Equity";
   investors: number;
-  cashOnHand: number;
-  monthlyBurn: number;
-  revenue: number;         // MRR
-  revenueGrowthPct: number;
-  grossMarginPct: number;
-  totalDebt: number;
-  employees: number;
-  location: string;
-  ceo: string;
-  cto: string;
-  description: string;
-  filingDate: string;
-  formType: string;
-  cik: string;
+  cash: number;
+  burn: number;
+  revenue: number;
+  growth: number;
+  margin: number;
+  debt: number;
   quarterlyRevenue: number[];
   quarterlyBurn: number[];
   quarterlyCash: number[];
+  quarterlyCustomers: number[];
   quarterLabels: string[];
   xbrl: {
-    totalAssets: number;
-    currentAssets: number;
-    cash: number;
-    accountsReceivable: number;
-    totalLiabilities: number;
-    currentLiabilities: number;
-    stockholdersEquity: number;
-    revenue: number;
-    cogs: number;
-    operatingExpenses: number;
+    assets: number;
+    liabilities: number;
+    equity: number;
+    revenueTTM: number;
     netIncome: number;
   };
-  riskFactors: string[];
+  risks: string[];
   useOfProceeds: Record<string, number>;
-  aiAnalysis: {
+  ai: {
     verdict: string;
     conviction: "HIGH" | "MODERATE" | "LOW";
-    riskLevel: number;
+    risk: number; // 1-5
     plainEnglish: string;
     summary: string;
-    bullCase: string;
-    bearCase: string;
+    bull: string;
+    bear: string;
   };
   market: {
-    askPrice: number;
-    bidPrice: number;
-    volume24h: number;
-    trades24h: number;
+    ask: number;
+    bid: number;
+    vol: number;
+    trades: number;
   };
 }
-
-export interface PortfolioPosition {
-  ticker: string;
-  companyName: string;
-  shares: number;
-  avgCost: number;
-  currentPrice: number;
-  totalInvested: number;
-  isLocked: boolean;
-}
-
-export interface Regulation {
-  title: string;
-  status: string;
-  statusColor: "green" | "amber" | "red" | "blue";
-  description: string;
-  citation: string;
-  effectiveDate?: string;
-}
-
-export type ScoreLabel = "STRONG" | "MODERATE" | "CAUTION" | "HIGH RISK";
