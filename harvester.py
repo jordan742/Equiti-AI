@@ -46,6 +46,7 @@ class StartupFinancials(BaseModel):
     
     # Clarity Layer (V2)
     founder_integrity_score: int = 80
+    elevator_pitch: str = "A forward-thinking startup optimizing efficiencies in their core sector vertical. Leveraging syndicated capital to aggressively scale operations and capture emerging market share."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR BENCHMARK ENGINE
