@@ -1,22 +1,28 @@
 """
-Equiti-AI: Comprehensive Investment Research & Reading Platform
-Streamlit Cloud Entry Point (Visual Directive: FT / Goldman Research Terminal)
+Equiti-AI v2.0 — Institutional Reg CF Intelligence Terminal
+Streamlit Cloud entry point: streamlit_app.py
 """
 
-import os, time, hashlib, random
+import os, re, time, math
+import requests
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from datetime import date, timedelta
-from edgar import set_identity
-import harvester
+from bs4 import BeautifulSoup
+from pydantic import BaseModel
+from typing import Optional
+from datetime import date, timedelta, datetime
+from edgar import Company, set_identity
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION
+# CONFIGURATION — change SEC_IDENTITY to your name + email before deploying
 # ═══════════════════════════════════════════════════════════════════════════════
-SEC_IDENTITY   = os.getenv("SEC_IDENTITY", "Equiti-AI Research admin@equiti.com")
-APP_VERSION    = "9.0.0-GOLDMAN-TERMINAL"
+SEC_IDENTITY   = os.getenv("SEC_IDENTITY", "Jordan equiti-ai-research@example.com")
+REG_CF_CAP     = 5_000_000
+EDGAR_PING_URL = "https://data.sec.gov/submissions/CIK0000320193.json"
+APP_VERSION    = "2.0.0"
+
 set_identity(SEC_IDENTITY)
 
 if "view_mode" not in st.session_state: st.session_state.view_mode = "grid"
@@ -24,76 +30,61 @@ if "active_deal" not in st.session_state: st.session_state.active_deal = None
 if "deals_cache" not in st.session_state: st.session_state.deals_cache = {}
 
 st.set_page_config(
-    page_title="Equiti-AI Research Hub",
-    page_icon="📰",
+    page_title="Equiti-AI v2 | Institutional Terminal",
+    page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    menu_items={
+        "Get Help": "https://github.com/jordan742/Equiti-AI",
+        "Report a bug": "https://github.com/jordan742/Equiti-AI/issues",
+        "About": f"Equiti-AI v{APP_VERSION} — Reg CF Intelligence. Data only.",
+    },
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ALPHA-RETAIL LEXICON (Tooltips)
-# ═══════════════════════════════════════════════════════════════════════════════
-LEXICON = {
-    "MOIC": "Money Multiple: A 2.0x MOIC means you have doubled your original investment.",
-    "IRR": "Annual Growth Rate: The average speed your investment grows each year.",
-    "Burn Multiple": "Efficiency Ratio: How much the startup spends to generate $1 of new revenue.",
-    "LBO Model": "Debt Analysis: A model that checks if the company can pay off its debts using its own cash flow.",
-    "Marketability Score": "Liquidity Check: How easy it is to sell your shares for cash right now.",
-    "SOFR/LSTA": "Market Benchmark: The standard interest rates banks use to price business loans."
-}
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ELITE AESTHETICS (FT / Goldman Sachs Styling)
+# INSTITUTIONAL CSS
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap');
-  
-  html, body, [class*="css"] { 
-      font-family: 'Inter', -apple-system, sans-serif; 
-      color: #000000 !important; 
-      background-color: #FFFFFF !important; 
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  html, body, [class*="css"] { font-family: 'JetBrains Mono', monospace; }
+
+  .terminal-hdr {
+    background: linear-gradient(135deg, #060a14 0%, #0c1a3a 100%);
+    border: 1px solid #0066cc; border-radius: 10px;
+    padding: 1.5rem 2rem; margin-bottom: 1.2rem;
   }
-  
-  /* Pure White Backgrounds */
-  div.stApp { background-color: #FFFFFF !important; }
-  section[data-testid="stSidebar"] { background-color: #F9F9F9 !important; border-right: 1px solid #E5E5E5; }
-  
-  /* Typography - Editorial */
-  h1, h2, h3, h4, h5, h6 { font-family: 'Inter', sans-serif !important; color: #000000 !important; font-weight: 700 !important; letter-spacing: -0.5px; }
-  p { font-size: 1.05rem; line-height: 1.6; color: #333333; }
-  
-  /* 16px Rounded Cards - No Shadows */
-  div[data-testid="stContainer"] > div {
-    background: #FFFFFF !important; 
-    border: 1px solid #E5E5E5 !important; 
-    border-radius: 16px !important;
-    padding: 1.5rem !important;
-    box-shadow: none !important;
-    color: #000000 !important;
+  .terminal-hdr h1 { color: #0099ff; margin:0; font-size:1.5rem; letter-spacing:3px; }
+  .terminal-hdr p  { color: #4a90d9; margin:0.3rem 0 0; font-size:0.72rem; letter-spacing:1px; }
+
+  .diag-ok   { color:#00cc66; font-weight:600; }
+  .diag-fail { color:#ff4444; font-weight:600; }
+
+  div[data-testid="metric-container"] {
+    background: #111827; border:1px solid #1e3a5f;
+    border-radius:8px; padding:0.9rem;
   }
-  
-  /* Top Intelligence Feed Navigation */
-  .intelligence-ribbon {
-      border-bottom: 1px solid #E5E5E5; padding: 0.5rem 0; margin-bottom: 2.5rem;
-      display: flex; gap: 1.5rem; font-size: 0.8rem; font-weight: 600; text-transform: uppercase;
-      align-items: center; letter-spacing: 0.5px; width: 100%;
+  div[data-testid="metric-container"] label { color:#4a9eff !important; letter-spacing:1px; }
+
+  .signal-badge {
+    display:inline-block; padding:0.45rem 1.2rem; border-radius:6px;
+    font-weight:700; font-size:0.95rem; letter-spacing:2px; text-align:center;
   }
-  .intel-tag { color: #A3A3A3; margin-right: 1rem; }
-  .alert-badge { border: 1px solid #E5E5E5; padding: 0.15rem 0.5rem; border-radius: 4px; background: #FFFFFF; }
-  
-  /* Thesis Bullets */
-  .thesis-bullet { font-size: 1.1rem; border-left: 2px solid #000000; padding-left: 1rem; margin-bottom: 1rem; font-weight: 500; }
-  
-  /* Solid Black primary button */
-  .stButton > button {
-      background-color: #000000 !important;
-      color: #FFFFFF !important;
-      font-weight: 600 !important;
-      border-radius: 8px !important;
-      border: 1px solid #000000 !important;
-      padding: 0.5rem 1rem !important;
-      text-transform: uppercase; letter-spacing: 0.5px;
+  .badge-bull { background:#052e16; border:1px solid #22c55e; color:#4ade80; }
+  .badge-neut { background:#422006; border:1px solid #f59e0b; color:#fbbf24; }
+  .badge-bear { background:#450a0a; border:1px solid #ef4444; color:#f87171; }
+
+  .investor-card {
+    background:#0f172a; border:1px solid #1e40af; border-radius:8px;
+    padding:1rem 1.2rem; margin-top:0.5rem;
+  }
+  .investor-card h4 { color:#60a5fa; margin:0 0 0.4rem; font-size:0.85rem; }
+  .investor-card .limit { color:#34d399; font-size:1.4rem; font-weight:700; }
+
+  .disclaimer-box {
+    background:#0d1117; border:1px solid #333; border-left:4px solid #0066cc;
+    border-radius:4px; padding:1rem 1.2rem; font-size:0.7rem;
+    color:#6b7280; line-height:1.65; margin-top:2rem;
   }
   .stButton > button:hover { background-color: #333333 !important; }
   
@@ -106,209 +97,504 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# HEADER
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div class="terminal-hdr">
+  <h1>EQUITI-AI &nbsp;|&nbsp; INSTITUTIONAL REG CF TERMINAL</h1>
+  <p>v{APP_VERSION} &nbsp;&middot;&nbsp; SAFE MODE &nbsp;&middot;&nbsp; DATA ONLY &nbsp;&middot;&nbsp; NOT INVESTMENT ADVICE</p>
+</div>
+""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MOCK GENERATORS / HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
-def generate_candlesticks(days: int = 90) -> pd.DataFrame:
-    np.random.seed(42)
-    base = 100.0
-    dates = [date.today() - timedelta(days=x) for x in range(days)]
-    dates.reverse()
-    df = pd.DataFrame({'Date': dates})
-    prices = [base]
-    for _ in range(1, days): prices.append(prices[-1] * (1 + np.random.normal(0, 0.025)))
-    df['Close'] = prices
-    df['Open'] = df['Close'] * (1 + np.random.normal(0, 0.01))
-    df['High'] = df[['Open', 'Close']].max(axis=1) * (1 + abs(np.random.normal(0, 0.005)))
-    df['Low'] = df[['Open', 'Close']].min(axis=1) * (1 - abs(np.random.normal(0, 0.005)))
-    return df
+with st.expander("CONNECTION DIAGNOSTIC", expanded=True):
+    d1, d2, d3 = st.columns(3)
+    with d1:
+        try:
+            t0 = time.time()
+            r = requests.get(EDGAR_PING_URL, headers={"User-Agent": SEC_IDENTITY}, timeout=8)
+            ms = int((time.time() - t0) * 1000)
+            if r.status_code == 200:
+                st.markdown(f'<span class="diag-ok">SEC EDGAR &nbsp; ONLINE &nbsp; {ms}ms</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span class="diag-fail">SEC EDGAR &nbsp; HTTP {r.status_code}</span>', unsafe_allow_html=True)
+        except Exception:
+            st.markdown('<span class="diag-fail">SEC EDGAR &nbsp; UNREACHABLE</span>', unsafe_allow_html=True)
+    with d2:
+        try:
+            t0 = time.time()
+            requests.get("https://wefunder.com", timeout=8, allow_redirects=True)
+            ms2 = int((time.time() - t0) * 1000)
+            st.markdown(f'<span class="diag-ok">WEFUNDER &nbsp; ONLINE &nbsp; {ms2}ms</span>', unsafe_allow_html=True)
+        except Exception:
+            st.markdown('<span class="diag-fail">WEFUNDER &nbsp; UNREACHABLE</span>', unsafe_allow_html=True)
+    with d3:
+        st.markdown(f'<span class="diag-ok">IDENTITY: {SEC_IDENTITY.split()[0]}</span>', unsafe_allow_html=True)
 
-def get_logo_emoji(name: str) -> str:
-    emojis = ["🚀", "⚙️", "🧬", "💻", "☁️", "📈", "🛡️", "🌐", "🧠"]
-    return emojis[int(hashlib.sha256(name.encode('utf-8')).hexdigest(), 16) % len(emojis)]
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATA MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
+class StartupFinancials(BaseModel):
+    cik: str
+    company_name: Optional[str] = None
+    cash: Optional[float] = None
+    net_income: Optional[float] = None
+    revenues: Optional[float] = None
+    short_term_debt: Optional[float] = None
+    min_investment: Optional[float] = None
 
-def generate_thesis(sector: str) -> list[str]:
-    return [
-        f"Significant market penetration expected in the {sector} vertical driven by favorable underlying macroeconomic regulation.",
-        "Management has repeatedly demonstrated capital efficiency resulting in an artificially low burn-multiple relative to peers.",
-        "Proprietary distribution channels lock in LTV metrics that strongly justify the current entry EV valuation."
+class ComplianceResult(BaseModel):
+    compliant: bool
+    status: str
+    total_raised_12m: float
+    current_offer_amount: float
+    combined_total: float
+    filing_count: int
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DEMO DATA
+# ═══════════════════════════════════════════════════════════════════════════════
+DEMO = StartupFinancials(
+    cik="0001234567",
+    company_name="Acme AI, Inc. (Demo)",
+    cash=850_000.0,
+    net_income=-1_200_000.0,
+    revenues=2_400_000.0,
+    short_term_debt=300_000.0,
+    min_investment=100.0,
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SEC REG CF INVESTOR LIMIT CALCULATOR (2026 Rules — 17 CFR §227.100)
+# ═══════════════════════════════════════════════════════════════════════════════
+def calc_reg_cf_limit(annual_income: float, net_worth: float) -> float:
+    if annual_income < 124_000 and net_worth < 124_000:
+        return max(2_500, 0.05 * min(annual_income, net_worth))
+    else:
+        return min(0.10 * min(annual_income, net_worth), 124_000)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SIGNAL BADGE
+# ═══════════════════════════════════════════════════════════════════════════════
+def render_signal_badge(health_score: float) -> str:
+    if health_score > 7:
+        return '<span class="signal-badge badge-bull">STRONGLY BULLISH</span>'
+    elif health_score >= 4:
+        return '<span class="signal-badge badge-neut">NEUTRAL</span>'
+    else:
+        return '<span class="signal-badge badge-bear">BEARISH / HIGH RISK</span>'
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CASH BURN PLOTLY CHART
+# ═══════════════════════════════════════════════════════════════════════════════
+def build_cash_burn_chart(cash: float, monthly_burn: float, months: int = 18) -> go.Figure:
+    labels = []
+    balances = []
+    today = date.today()
+    bal = cash
+    for i in range(months + 1):
+        d = today + timedelta(days=30 * i)
+        labels.append(d.strftime("%b %Y"))
+        balances.append(max(bal, 0))
+        bal -= monthly_burn
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=labels, y=balances,
+        fill="tozeroy",
+        fillcolor="rgba(0,102,204,0.15)",
+        line=dict(color="#0066cc", width=2),
+        mode="lines",
+        name="Projected Cash",
+        hovertemplate="<b>%{x}</b><br>$%{y:,.0f}<extra></extra>",
+    ))
+
+    # Zero line
+    fig.add_hline(y=0, line_dash="dot", line_color="#ef4444", opacity=0.6,
+                  annotation_text="ZERO CASH", annotation_position="bottom left",
+                  annotation_font_color="#ef4444")
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#0e1117",
+        plot_bgcolor="#0e1117",
+        title=dict(text="PROJECTED CASH BURN", font=dict(size=14, color="#4a9eff", family="JetBrains Mono")),
+        yaxis=dict(title="Cash Balance ($)", tickprefix="$", tickformat=",", gridcolor="#1e293b"),
+        xaxis=dict(gridcolor="#1e293b"),
+        height=340,
+        margin=dict(l=60, r=20, t=50, b=40),
+        showlegend=False,
+    )
+    return fig
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HARVESTER
+# ═══════════════════════════════════════════════════════════════════════════════
+def _find_cik_and_min(campaign_url: str) -> tuple[str, Optional[float]]:
+    headers = {"User-Agent": SEC_IDENTITY}
+    resp = requests.get(campaign_url, headers=headers, timeout=15)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Extract min investment
+    min_inv = None
+    patterns = [
+        r'minimum\s+investment[^\$]*\$\s*([\d,]+)',
+        r'min\.?\s+investment[^\$]*\$\s*([\d,]+)',
+        r'\$\s*([\d,]+)\s+minimum',
+        r'invest\s+as\s+little\s+as\s+\$\s*([\d,]+)',
+        r'starting\s+at\s+\$\s*([\d,]+)',
     ]
+    page_text = soup.get_text(" ", strip=True)
+    for pat in patterns:
+        m = re.search(pat, page_text, re.IGNORECASE)
+        if m:
+            try:
+                min_inv = float(m.group(1).replace(",", ""))
+                break
+            except ValueError:
+                continue
 
-def generate_narrative(name: str) -> str:
-    return f"""**Executive Summary:** {name} operates at the frontier of its vertical, deploying rapid capital to isolate 
-    key intellectual property advantages before institutional money prices them out. The founding team brings ex-FAANG 
-    operational rigor, immediately reflecting heavily in their tight margins and explosive top-line growth.
+    # Find CIK
+    for tag in soup.find_all("a", href=True):
+        href = tag["href"]
+        text = tag.get_text(strip=True).lower()
+        if "form c" in text or "form-c" in text or "sec.gov" in href:
+            m = re.search(r'CIK=?(\d+)', href, re.IGNORECASE) or re.search(r'/(\d{7,10})/', href)
+            if m:
+                return m.group(1), min_inv
 
-**Market Tailwinds:** Federal regulatory frameworks currently advantage localized operators over global incumbents. This creates 
-a 36-month window for {name} to scale operations nationally before compliance burdens flatten the landscape. 
+    raise ValueError("No CIK found on this page. Confirm it links to an SEC Form C filing.")
 
-**Underwriting Perspective:** We view this asset as a high-velocity play perfectly suited for early-liquidity milestones.
-"""
 
-@st.dialog("Execution Gateway")
-def execution_modal(asset: str):
-    st.markdown(f"### Trade Authorization: {asset}")
-    st.markdown("You are submitting binding electronic instruction to purchase illiquid equity.")
-    c1 = st.checkbox("Accept 12-Month Reg CF Lockup")
-    c2 = st.checkbox("Sign Binding Transfer Agreement")
-    if st.button("AUTHORIZE FUNDS", disabled=not (c1 and c2), type="primary", use_container_width=True):
-        st.success(f"Trade successful. Funds deducted and {asset} equity routed to ledger.")
-        time.sleep(2)
-        st.rerun()
+def _xbrl_fact(filing, concept: str) -> Optional[float]:
+    for fn in [
+        lambda: float(getattr(filing.obj(), concept)),
+        lambda: float(filing.xbrl().facts.get(f"us-gaap:{concept}")),
+        lambda: float(filing.xbrl().facts.to_dataframe().query(f"concept.str.endswith('{concept}')").iloc[-1]["value"]),
+    ]:
+        try:
+            v = fn()
+            if v is not None:
+                return v
+        except Exception:
+            continue
+    return None
+
+
+def harvest(campaign_url: str) -> StartupFinancials:
+    cik, min_inv = _find_cik_and_min(campaign_url)
+    company = Company(cik)
+    filings = company.get_filings(form="C")
+    if not filings:
+        raise ValueError(f"No Form C filings for CIK {cik}.")
+    latest = filings.latest()
+    return StartupFinancials(
+        cik=cik,
+        company_name=company.name,
+        cash=_xbrl_fact(latest, "Cash"),
+        net_income=_xbrl_fact(latest, "NetIncomeLoss"),
+        revenues=_xbrl_fact(latest, "Revenues"),
+        short_term_debt=_xbrl_fact(latest, "ShortTermBorrowings"),
+        min_investment=min_inv,
+    )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SCORER
+# ═══════════════════════════════════════════════════════════════════════════════
+def score(fin: StartupFinancials, prior_revenues: Optional[float] = None) -> ScoreResult:
+    base = 5.0
+    runway = None
+    if fin.cash is not None and fin.net_income not in (None, 0):
+        runway = fin.cash / (abs(fin.net_income) / 12)
+        if runway < 6:
+            base -= 3
+    debt_ratio = None
+    if fin.short_term_debt is not None and fin.revenues not in (None, 0):
+        debt_ratio = fin.short_term_debt / fin.revenues
+    growth_pct = None
+    if prior_revenues and fin.revenues is not None and prior_revenues > 0:
+        growth_pct = (fin.revenues - prior_revenues) / prior_revenues * 100
+        if growth_pct > 20:
+            base += 2
+    val = max(1.0, min(10.0, base))
+    r_str = f"{runway:.1f} months" if runway else "unknown"
+    d_str = f"{debt_ratio:.2f}" if debt_ratio else "unknown"
+    g_str = f"{growth_pct:.1f}%" if growth_pct is not None else "unavailable"
+    risk = "Immediate runway risk warrants caution" if runway and runway < 6 else "Runway is adequate for near-term operations"
+    thesis = (
+        f"{fin.company_name or 'This company'} scores {val:.1f}/10 based on "
+        f"a cash runway of {r_str} and a debt-to-revenue ratio of {d_str}. "
+        f"Revenue growth versus prior period is {g_str}, "
+        f"{'exceeding' if growth_pct and growth_pct > 20 else 'not exceeding'} the 20% threshold. "
+        f"{risk}, and the profile {'supports' if val >= 6 else 'does not yet support'} further diligence."
+    )
+    return ScoreResult(
+        score=val,
+        runway_months=round(runway, 2) if runway else None,
+        debt_ratio=round(debt_ratio, 4) if debt_ratio else None,
+        revenue_growth_pct=round(growth_pct, 2) if growth_pct is not None else None,
+        investment_thesis=thesis,
+    )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPLIANCE
+# ═══════════════════════════════════════════════════════════════════════════════
+def check_compliance(cik: str, current_offer: float) -> ComplianceResult:
+    cutoff = date.today() - timedelta(days=365)
+    company = Company(cik)
+    filings = company.get_filings(form=["C", "C-U"])
+    total = 0.0
+    count = 0
+    for f in (filings or []):
+        fd = getattr(f, "filing_date", None) or getattr(f, "date", None)
+        if fd is None:
+            continue
+        if isinstance(fd, str):
+            fd = datetime.strptime(fd[:10], "%Y-%m-%d").date()
+        if fd < cutoff:
+            continue
+        for field in ["offeringAmount", "amountSold", "totalAmountSold", "totalOfferingAmount"]:
+            try:
+                v = getattr(f.obj(), field, None)
+                if v is not None:
+                    total += float(v)
+                    break
+            except Exception:
+                continue
+        count += 1
+    combined = total + current_offer
+    ok = combined <= REG_CF_CAP
+    return ComplianceResult(
+        compliant=ok,
+        status="COMPLIANT" if ok else "NON_COMPLIANT",
+        total_raised_12m=total,
+        current_offer_amount=current_offer,
+        combined_total=combined,
+        filing_count=count,
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("### EQUITI RESEARCH")
-    st.markdown("<br>", unsafe_allow_html=True)
-    current_page = st.radio("Core Index", ["Discovery", "My Portfolio", "Secondary Market", "Document AI"], label_visibility="collapsed")
-    
-    # 10px Market Footer
+    st.markdown("### TERMINAL SETTINGS")
+    demo_mode = st.toggle("Demo Mode", value=True, help="Sample data — no URL or API key needed.")
+    st.divider()
+    offer_amount   = st.number_input("Current Offer ($)", 0, REG_CF_CAP, 500_000, 25_000)
+    prior_revenues = st.number_input("Prior Year Revenue ($)", 0, value=0, step=10_000)
+    st.divider()
+
+    # ── Investor Profile — SEC Reg CF Limit Calculator ─────────────────────
+    st.markdown("### INVESTOR PROFILE")
+    st.caption("2026 Reg CF Limits (17 CFR §227.100)")
+    annual_income = st.number_input("Annual Income ($)", 0, value=75_000, step=5_000)
+    net_worth     = st.number_input("Net Worth ($)", 0, value=60_000, step=5_000)
+    inv_limit     = calc_reg_cf_limit(annual_income, net_worth)
+
     st.markdown(f"""
-    <div class="sidebar-footer">
-        <b>MARKET BENCHMARKS</b><br>
-        SOFR: 5.33%<br>
-        LSTA INDEX: 8.25%<br>
-        <span title="{LEXICON['SOFR/LSTA']}">Hover for definitions.</span>
+    <div class="investor-card">
+      <h4>YOUR 2026 REG CF LIMIT</h4>
+      <span class="limit">${inv_limit:,.0f}</span>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.markdown("<br><br><br><br>", unsafe_allow_html=True)
-    with st.expander("Admin / Debug"):
-        if st.button("Purge Deal Cache", use_container_width=True):
-            st.session_state.deals_cache.clear()
+
+    if annual_income < 124_000 and net_worth < 124_000:
+        st.caption(f"Rule: max($2,500, 5% x min(${annual_income:,}, ${net_worth:,}))")
+    else:
+        st.caption(f"Rule: 10% x min(${annual_income:,}, ${net_worth:,}), capped at $124,000")
+
+    st.divider()
+    st.caption(f"Equiti-AI v{APP_VERSION} | Cap: ${REG_CF_CAP:,}")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GLOBAL INTELLIGENCE HEADER
+# MAIN INPUT
 # ═══════════════════════════════════════════════════════════════════════════════
-st.markdown("""
-<div class="intelligence-ribbon">
-    <span class="intel-tag">EQUITI INTELLIGENCE</span>
-    <span class="alert-badge">🚨 Covenant Breach: Massive Dynamic</span>
-    <span class="alert-badge">📅 SEC Form C Due: Globex Aerospace</span>
-    <span class="alert-badge">📈 New Bid: Acme Cloud Storage</span>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("---")
+col_url, col_btn = st.columns([5, 1])
+wefunder_url = col_url.text_input("url", placeholder="https://wefunder.com/company-name",
+                                  disabled=demo_mode, label_visibility="collapsed")
+run = col_btn.button("SCAN", type="primary", use_container_width=True)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN ROUTING LOGIC
-# ═══════════════════════════════════════════════════════════════════════════════
-
-if current_page == "Discovery":
-    
-    if st.session_state.view_mode == "grid":
-        st.markdown("## Primary Research Grid")
-        st.caption("Editorial curation of active Private Market opportunities.")
-        urls = harvester.discover_recent_deals()
-        
-        with st.spinner("Compiling Editorial Data..."):
-            for url in urls:
-                if url not in st.session_state.deals_cache:
-                    st.session_state.deals_cache[url] = harvester.harvest(url)
-                    
-        for i in range(0, len(urls), 3):
-            cols = st.columns(3)
-            for j in range(3):
-                if i + j < len(urls):
-                    url = urls[i+j]
-                    deal = st.session_state.deals_cache[url]
-                    with cols[j]:
-                        with st.container():
-                            hs = int((deal.governance_score + deal.social_buzz_velocity) / 2)
-                            h1, h2 = st.columns([3, 1])
-                            h1.markdown(f"#### {get_logo_emoji(deal.company_name)} {deal.company_name}")
-                            color = "#000000" if hs > 60 else "#666666"
-                            h2.markdown(f"<div style='text-align:right; font-weight:700; color:{color}; font-size:1.2rem;'>{hs}</div>", unsafe_allow_html=True)
-                            
-                            st.markdown(f"<p style='font-size:0.9rem; margin-top:0.5rem; height:4rem; color:#666666;'>{deal.elevator_pitch}</p>", unsafe_allow_html=True)
-                            
-                            if st.button("Read Memorandum", key=f"btn_{deal.cik}", use_container_width=True):
-                                st.session_state.active_deal = deal
-                                st.session_state.view_mode = "memo"
-                                st.rerun()
-
-    elif st.session_state.view_mode == "memo":
-        deal = st.session_state.active_deal
-        
-        if st.button("← Return To Sector Research", type="secondary"):
-            st.session_state.view_mode = "grid"
-            st.session_state.active_deal = None
-            st.rerun()
-            
-        st.markdown(f"## {get_logo_emoji(deal.company_name)} Investment Memorandum: {deal.company_name}")
-        st.markdown("---")
-        
-        # ── SECTION A: THE THESIS ──────────────────────────────────────────
-        st.markdown("### Section A: Investment Thesis")
-        thesis_points = generate_thesis(deal.sector)
-        for point in thesis_points:
-            st.markdown(f"<div class='thesis-bullet'>{point}</div>", unsafe_allow_html=True)
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # ── SECTION B: UNDERWRITING ──────────────────────────────────────────
-        st.markdown("### Section B: Underwriting & Narrative")
-        left, right = st.columns([3, 2], gap="large")
-        with left:
-            st.markdown(generate_narrative(deal.company_name))
-        
-        with right:
-            with st.container():
-                st.markdown("#### Institutional Metrics")
-                m1, m2 = st.columns(2)
-                # Mathematical Mock for Moic
-                equity = deal.revenues * 5 if deal.revenues else 1000000
-                exit_v = equity * 2.5
-                est_moic = exit_v / equity if equity > 0 else 0
-                est_irr = ((est_moic ** (1/5)) - 1) * 100 if est_moic > 0 else 0
-                bm = f"{deal.burn_multiple}x" if deal.burn_multiple else "2.1x"
-                
-                m1.metric("Gross MOIC", f"{est_moic:.1f}x", help=LEXICON["MOIC"])
-                m2.metric("Blended IRR", f"{est_irr:.1f}%", help=LEXICON["IRR"])
-                
-                m3, m4 = st.columns(2)
-                m3.metric("Burn Multiple", bm, help=LEXICON["Burn Multiple"])
-                m4.metric("Debt Ratio", "1.5x", help=LEXICON["LBO Model"])
-                
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        # ── SECTION C: THE TRADE DESK ──────────────────────────────────────────
-        st.markdown("### Section C: The Trade Desk")
-        cl, cr = st.columns([2, 1], gap="large")
-        
-        with cl:
-            df_candle = generate_candlesticks(90)
-            fig = go.Figure(data=[go.Candlestick(
-                x=df_candle['Date'], open=df_candle['Open'],
-                high=df_candle['High'], low=df_candle['Low'], close=df_candle['Close'],
-                increasing_line_color='#000000', decreasing_line_color='#CCCCCC'
-            )])
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                height=300, margin=dict(t=0, b=0, l=0, r=0),
-                xaxis_rangeslider_visible=False,
-                yaxis=dict(gridcolor="#E5E5E5", showline=False, zeroline=False), 
-                xaxis=dict(gridcolor="rgba(0,0,0,0)")
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-        with cr:
-            with st.container():
-                st.markdown(f"#### Order Routing")
-                st.metric("Marketability Score", "89 / 100", help=LEXICON["Marketability Score"])
-                st.caption("Pricing indicates strong historical liquidity windows over 90-day averages.")
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("Execute Investment", type="primary", use_container_width=True):
-                    execution_modal(deal.company_name)
-
-
-elif current_page == "Secondary Market":
-    st.markdown("## Institutional Trade Desk")
-    st.info("The Secondary Market execution logic has directly merged into the Reading Platform. Please navigate to **Discovery**, select an asset, and scroll to **Section C: The Trade Desk** to route block trades.")
+if not run:
+    st.markdown("""
+    <div style="text-align:center;color:#475569;padding:3rem 0;font-size:0.85rem;">
+        Toggle <b>Demo Mode</b> in the sidebar and click <b>SCAN</b> to explore the terminal,<br>
+        or paste a Wefunder URL to scan a live Reg CF deal.
+    </div>
+    """, unsafe_allow_html=True)
 
 else:
-    st.markdown(f"## {current_page} Module")
-    st.info("Module locked to Administrative credentials or awaiting SEC data sync.")
+    # ── DATA PIPELINE ──────────────────────────────────────────────────────
+    if demo_mode:
+        financials = DEMO
+    else:
+        if not wefunder_url.strip():
+            st.warning("Enter a Wefunder URL or enable Demo Mode.")
+            st.stop()
+        with st.spinner("Scraping Wefunder & pulling SEC Form C…"):
+            try:
+                financials = harvest(wefunder_url.strip())
+            except Exception as e:
+                st.error(f"**Harvest Error:** {e}")
+                st.stop()
+
+    with st.spinner("Compliance check…"):
+        try:
+            compliance = check_compliance(financials.cik, float(offer_amount))
+        except Exception as e:
+            st.error(f"**Compliance Error:** {e}")
+            st.stop()
+
+    with st.spinner("Scoring…"):
+        result = score(financials, prior_revenues=prior_revenues or None)
+
+    # ── COMPANY HEADER + SIGNAL BADGE ──────────────────────────────────────
+    hdr1, hdr2 = st.columns([3, 2])
+    with hdr1:
+        st.markdown(f"## {financials.company_name or f'CIK {financials.cik}'}")
+        if demo_mode:
+            st.caption("Demo data — disable Demo Mode to scan live deals.")
+    with hdr2:
+        st.markdown(render_signal_badge(result.score), unsafe_allow_html=True)
+
+    # ── COMPLIANCE BANNER ──────────────────────────────────────────────────
+    used_pct = compliance.combined_total / REG_CF_CAP * 100
+    if compliance.compliant:
+        st.success(f"REG CF: COMPLIANT — ${compliance.combined_total:,.0f} of ${REG_CF_CAP:,} cap ({used_pct:.1f}%)")
+    else:
+        st.warning(f"REG CF: NON-COMPLIANT — ${compliance.combined_total:,.0f} exceeds ${REG_CF_CAP:,} cap")
+    st.progress(min(used_pct / 100, 1.0))
+    st.markdown("---")
+
+    # ── METRIC CARDS ───────────────────────────────────────────────────────
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Health Score", f"{result.score:.1f} / 10")
+    m2.metric(
+        "Cash Runway",
+        f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
+        delta="LOW" if result.runway_months and result.runway_months < 6 else None,
+        delta_color="inverse",
+    )
+    m3.metric(
+        "Min Investment",
+        f"${financials.min_investment:,.0f}" if financials.min_investment else "N/A",
+    )
+    m4.metric(
+        "Your Reg CF Limit",
+        f"${inv_limit:,.0f}",
+    )
+
+    st.markdown("---")
+
+    # ── TWO-COLUMN LAYOUT ──────────────────────────────────────────────────
+    left, right = st.columns([3, 2], gap="large")
+
+    with left:
+        # Cash burn chart
+        if financials.cash is not None and financials.net_income is not None and financials.net_income < 0:
+            monthly_burn = abs(financials.net_income) / 12
+            fig = build_cash_burn_chart(financials.cash, monthly_burn)
+            st.plotly_chart(fig, use_container_width=True)
+        elif financials.cash is not None:
+            st.info("Company is cash-flow positive — no burn projection needed.")
+
+        # Investment thesis
+        st.markdown("#### INVESTMENT THESIS")
+        st.info(result.investment_thesis)
+
+        # Deal memo
+        st.markdown("#### DEAL MEMO")
+        compliance_label = "PASS" if compliance.compliant else "FAIL"
+        key_risk = result.investment_thesis.split(". ")[-1].strip().rstrip(".")
+        st.markdown(f"""
+| Field | Value |
+|:---|:---|
+| **Company** | {financials.company_name or financials.cik} |
+| **Health Score** | {result.score:.1f} / 10 |
+| **Signal** | {'STRONGLY BULLISH' if result.score > 7 else 'NEUTRAL' if result.score >= 4 else 'BEARISH / HIGH RISK'} |
+| **Compliance** | {compliance_label} |
+| **Key Risk** | {key_risk}. |
+""")
+
+    with right:
+        # Balance sheet — st.dataframe
+        st.markdown("#### BALANCE SHEET (FORM C)")
+
+        def fmt(v):
+            return f"${v:,.0f}" if v is not None else "—"
+
+        bs_df = pd.DataFrame({
+            "Line Item": [
+                "Cash & Equivalents",
+                "Total Revenues",
+                "Net Income / (Loss)",
+                "Short-Term Debt",
+                "Debt / Revenue Ratio",
+                "Monthly Burn Rate",
+            ],
+            "Amount": [
+                fmt(financials.cash),
+                fmt(financials.revenues),
+                fmt(financials.net_income),
+                fmt(financials.short_term_debt),
+                f"{result.debt_ratio:.4f}" if result.debt_ratio else "—",
+                fmt(abs(financials.net_income) / 12) if financials.net_income and financials.net_income < 0 else "—",
+            ],
+        })
+        st.dataframe(bs_df, use_container_width=True, hide_index=True)
+
+        # Revenue Growth metric
+        if result.revenue_growth_pct is not None:
+            st.metric("YoY Revenue Growth", f"{result.revenue_growth_pct:.1f}%",
+                      delta="Above 20% threshold" if result.revenue_growth_pct > 20 else None)
+
+        # Compliance detail
+        with st.expander("COMPLIANCE DETAIL"):
+            st.json({
+                "cik": financials.cik,
+                "status": compliance.status,
+                "filings_12m": compliance.filing_count,
+                "raised_12m": f"${compliance.total_raised_12m:,.0f}",
+                "current_offer": f"${compliance.current_offer_amount:,.0f}",
+                "combined": f"${compliance.combined_total:,.0f}",
+                "cap": f"${REG_CF_CAP:,}",
+                "remaining": f"${max(REG_CF_CAP - compliance.combined_total, 0):,.0f}",
+            })
+
+    st.markdown("---")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LEGAL DISCLAIMER — 2026 SEC/FINRA AI DISCLOSURE
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div class="disclaimer-box">
+<b>LEGAL DISCLAIMER & AI DISCLOSURE — EQUITI-AI v{APP_VERSION} — 2026</b><br><br>
+
+<b>Not Investment Advice.</b> Equiti-AI is a data aggregation and analytical research tool.
+Nothing on this platform constitutes investment advice, a solicitation to buy or sell securities,
+or a recommendation. All outputs are algorithmic and for informational purposes only.<br><br>
+
+<b>AI-Generated Content Disclosure (SEC AI Guidance 2024-2026 / FINRA Rule 2010).</b>
+Portions of this analysis are generated by artificial intelligence. AI output may contain errors,
+omissions, or hallucinations. Users must independently verify all data against primary sources
+including SEC EDGAR filings before making any financial decision.<br><br>
+
+<b>Regulation Crowdfunding (Reg CF) — 17 CFR §227.</b> Non-accredited investors: if both annual
+income and net worth are below $124,000, limit is the greater of $2,500 or 5% of the lesser of
+income/net worth. If either exceeds $124,000, limit is 10% of the lesser, capped at $124,000 per
+12-month period. Maximum issuer raise: $5,000,000 per 12 months. Subject to SEC inflation
+adjustments.<br><br>
+
+<b>No Broker-Dealer Registration.</b> Equiti-AI is not a registered broker-dealer, investment
+adviser, or funding portal. This platform operates in "Safe Mode" — it never holds, transfers,
+custodies, or routes investor funds. All execution must occur through a FINRA-registered portal.<br><br>
+
+<b>Investing in startups carries a high degree of risk including total loss of investment.
+There is no guaranteed secondary market for Reg CF securities. Past performance does not
+indicate future results.</b>
+</div>
+""", unsafe_allow_html=True)
