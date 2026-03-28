@@ -1,5 +1,5 @@
 """
-Equiti-AI x AlphaDesk Pro: Unified Institutional OS (High-Fidelity UI Sync)
+Equiti-AI x AlphaDesk Pro: Retail Clarity Layer
 Streamlit Cloud entry point: streamlit_app.py
 """
 
@@ -7,6 +7,7 @@ import os, time, hashlib, random
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 import streamlit as st
 from datetime import date, timedelta
 from edgar import set_identity
@@ -16,7 +17,7 @@ import harvester
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 SEC_IDENTITY   = os.getenv("SEC_IDENTITY", "AlphaDesk Admin admin@alphadesk.com")
-APP_VERSION    = "7.1.0-ALPHADESK-SYNC"
+APP_VERSION    = "7.2.0-RETAIL-CLARITY"
 PORTFOLIO_FILE = "portfolio.csv"
 set_identity(SEC_IDENTITY)
 
@@ -25,76 +26,34 @@ if "active_deal" not in st.session_state: st.session_state.active_deal = None
 if "deals_cache" not in st.session_state: st.session_state.deals_cache = {}
 
 st.set_page_config(
-    page_title="AlphaDesk Pro | Unified UI",
+    page_title="AlphaDesk Pro | Retail Clarity",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ALPHADESK CSS: TRUE NAVY (#0a192f) & TABULAR NUMS
+# CSS INJECTIONS & UI HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  
   html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-
-  /* AlphaDesk True Navy Background */
   div.stApp { background-color: #0a192f; }
-  
-  .terminal-hdr {
-    background: #112240; 
-    border-bottom: 2px solid #64ffda; 
-    padding: 1.2rem 2rem; margin-bottom: 2rem;
-  }
+  .terminal-hdr { background: #112240; border-bottom: 2px solid #64ffda; padding: 1.2rem 2rem; margin-bottom: 2rem; }
   .terminal-hdr h1 { color: #ccd6f6; margin:0; font-size:1.6rem; letter-spacing:0.5px; font-weight: 700; text-transform: uppercase; }
   .terminal-hdr p  { color: #8892b0; margin:0.2rem 0 0; font-size:0.85rem; letter-spacing:1px; }
-
-  /* High-Fidelity Glassmorphism Containers */
-  div[data-testid="stContainer"] > div {
-    background: rgba(17, 34, 64, 0.75); 
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(100, 255, 218, 0.15); 
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 10px 30px -10px rgba(2, 12, 27, 0.7);
-    color: #a8b2d1;
-    transition: all 0.25s cubic-bezier(0.645, 0.045, 0.355, 1);
-  }
-  div[data-testid="stContainer"] > div:hover {
-    border: 1px solid rgba(100, 255, 218, 0.4); 
-    transform: translateY(-3px);
-  }
-  
-  /* KPI Typography & Tabular Nums */
-  div[data-testid="stMetric"] label { 
-    color: #8892b0 !important; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; 
-  }
-  div[data-testid="stMetric"] div { 
-    color: #ccd6f6 !important; font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; 
-  }
-
-  /* Status Badges */
+  div[data-testid="stContainer"] > div { background: rgba(17, 34, 64, 0.75); backdrop-filter: blur(8px); border: 1px solid rgba(100, 255, 218, 0.15); border-radius: 8px; padding: 1.5rem; box-shadow: 0 10px 30px -10px rgba(2, 12, 27, 0.7); color: #a8b2d1; transition: all 0.25s cubic-bezier(0.645, 0.045, 0.355, 1); }
+  div[data-testid="stContainer"] > div:hover { border: 1px solid rgba(100, 255, 218, 0.4); transform: translateY(-3px); }
+  div[data-testid="stMetric"] label { color: #8892b0 !important; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
+  div[data-testid="stMetric"] div { color: #ccd6f6 !important; font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
   .badge-active { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 6px; background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #4ade80; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
   .badge-watch { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 6px; background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; color: #fbbf24; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
   .badge-restructure { display: inline-block; padding: 0.25rem 0.65rem; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; color: #f87171; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
-  
-  /* Sidebar Font Size */
   div[role="radiogroup"] label { font-size: 1.05rem; font-weight: 600; color: #ccd6f6; }
-  
-  /* Gold-on-Dark Tickers */
   .gold-ticker-label { color: #8892b0; font-size: 0.8rem; text-transform: uppercase; font-weight: 600; margin-bottom: 0.2rem; }
   .gold-ticker-val { color: #ffbc00; font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin-bottom: 1rem; }
-  
-  /* Footer Pin */
-  .footer {
-      position: fixed; left: 0; bottom: 0; width: 100%;
-      background-color: #020c1b; border-top: 1px solid #112240;
-      color: #64748b; text-align: center; padding: 0.75rem;
-      font-size: 0.7rem; font-weight: 500; z-index: 1000;
-  }
-  
+  .footer { position: fixed; left: 0; bottom: 0; width: 100%; background-color: #020c1b; border-top: 1px solid #112240; color: #64748b; text-align: center; padding: 0.75rem; font-size: 0.7rem; font-weight: 500; z-index: 1000; }
   .stDataFrame { background: #112240; border-radius: 8px; }
   table { color: #ccd6f6 !important; font-variant-numeric: tabular-nums; }
   th { background-color: #0a192f !important; color: #8892b0 !important; font-weight: 600 !important; }
@@ -103,14 +62,23 @@ st.markdown("""
 
 st.markdown(f"""
 <div class="terminal-hdr">
-  <h1>ALPHADESK PRO &nbsp;|&nbsp; PRIVATE MARKETS UI</h1>
+  <h1>ALPHADESK PRO &nbsp;|&nbsp; RETAIL CLARITY UX</h1>
   <p>POWERED BY EQUITI-AI v{APP_VERSION} &nbsp;&middot;&nbsp; HIGH-FIDELITY SYNC</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MOCK GENERATORS & ALGORITHMS (PORTFOLIO & OTC)
-# ═══════════════════════════════════════════════════════════════════════════════
+# Retail Clarity Tooltip Lexicon
+TIPS = {
+    "AUM": "Total AUM (Assets Under Management): The total gross market value of the investments managed by the fund.",
+    "FMV": "Portfolio FMV (Fair Market Value): What the active portfolio is completely worth if liquidated today.",
+    "MOIC": "Money Multiple (MOIC): If this is 2.0x, you doubled your money. It does not factor in how long it took.",
+    "IRR": "Gross IRR (Internal Rate of Return): The annualized, time-weighted interest rate your investment is scaling at.",
+    "SOFR": "Market SOFR: The baseline interest rate banks use. Higher rates make debt more expensive for startups.",
+    "LSTA": "LSTA Index: The benchmark performance index measuring the 100 largest institutional leveraged loans.",
+    "EBITDA": "EBITDA: Fundamentally, a proxy for raw operating cash flow before accounting math affects it.",
+    "LEV": "Leverage Ratio: How many times greater the company's debt is compared to its cash flow."
+}
+
 def generate_portfolio_df() -> pd.DataFrame:
     data = []
     names = ["Acme Cloud Storage", "Globex Aerospace", "Soylent Foods", "Initech Software", "Massive Dynamic Biotech"]
@@ -122,13 +90,7 @@ def generate_portfolio_df() -> pd.DataFrame:
         moic = random.uniform(0.5, 4.5)
         fmv = cost * moic
         irr = ((moic ** (1/random.uniform(1.0, 5.0))) - 1) * 100
-        data.append({
-            "Company": names[i], "Sector": sectors[i], "Type": types[i],
-            "Cost ($M)": round(cost, 1), "FMV ($M)": round(fmv, 1),
-            "MOIC": round(moic, 2), "IRR (%)": round(irr, 1),
-            "Lev.": f"{random.uniform(1.5, 6.0):.1f}x",
-            "Rating": random.choice(["L1", "L2", "L3"]), "Status": statuses[i]
-        })
+        data.append({"Company": names[i], "Sector": sectors[i], "Type": types[i], "Cost ($M)": round(cost, 1), "FMV ($M)": round(fmv, 1), "MOIC": round(moic, 2), "IRR (%)": round(irr, 1), "Lev.": f"{random.uniform(1.5, 6.0):.1f}x", "Rating": random.choice(["L1", "L2", "L3"]), "Status": statuses[i]})
     return pd.DataFrame(data)
 
 def generate_candlesticks(days: int = 30) -> pd.DataFrame:
@@ -149,20 +111,28 @@ def get_logo_emoji(name: str) -> str:
     emojis = ["🚀", "⚡", "🧬", "🤖", "☁️", "📈", "🛡️", "🌐", "🧠"]
     return emojis[int(hashlib.sha256(name.encode('utf-8')).hexdigest(), 16) % len(emojis)]
 
+@st.dialog("Safety Check: Pre-Trade Verification")
+def execute_trade_modal(asset, shares, price, action):
+    st.markdown(f"### You are routing a {action} for {shares:,} shares of {asset}")
+    st.info("Because private equity is highly illiquid, Federal regulations require active checklist confirmation before submitting directly to the Ledger.")
+    
+    c1 = st.checkbox("1. Is this money you are completely willing and able to afford to lose?")
+    c2 = st.checkbox("2. Do you conceptually understand the 12-month lockup transfer constraints?")
+    c3 = st.checkbox("3. Have you reviewed the SEC Risk Factors explicitly warning against private speculation?")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("AUTHORIZE EXECUTION", use_container_width=True, type="primary", disabled=not (c1 and c2 and c3)):
+        st.success("Trade authorized. Routing instantly to Dark Pool execution matrix.")
+        time.sleep(2)
+        st.rerun()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ALPHADESK SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 modules = {
-    "📊 Dashboard": "Dashboard", 
-    "🤝 Deal Pipeline": "Deal Pipeline", 
-    "💼 Portfolio": "Portfolio", 
-    "🏦 Private Credit": "Private Credit", 
-    "⚙️ LBO Model": "LBO Model", 
-    "🔄 Secondary Exchange": "Secondary Exchange", 
-    "📄 Document AI": "Document AI", 
-    "💧 IR & Waterfall": "IR & Waterfall", 
-    "🛡️ Compliance": "Compliance", 
-    "🌐 Market Intel": "Market Intel"
+    "📊 Dashboard": "Dashboard", "🤝 Deal Pipeline": "Deal Pipeline", "💼 Portfolio": "Portfolio", 
+    "🏦 Private Credit": "Private Credit", "⚙️ LBO Model": "LBO Model", "🔄 Secondary Exchange": "Secondary Exchange", 
+    "📄 Document AI": "Document AI", "💧 IR & Waterfall": "IR & Waterfall", "🛡️ Compliance": "Compliance", "🌐 Market Intel": "Market Intel"
 }
 
 with st.sidebar:
@@ -172,11 +142,13 @@ with st.sidebar:
     
     st.markdown("<br><br><br><br>", unsafe_allow_html=True)
     st.markdown("---")
-    st.markdown("### LIVE MARKET RATES")
+    st.markdown("### LIVE MARKET RATES", help="Global benchmarks influencing debt structure models.")
     
-    st.markdown("<div class='gold-ticker-label'>MARKET SOFR</div>", unsafe_allow_html=True)
+    c_s, c_r = st.columns([4, 1])
+    with c_s: st.markdown("<div class='gold-ticker-label'>MARKET SOFR</div>", unsafe_allow_html=True, help=TIPS["SOFR"])
     st.markdown("<div class='gold-ticker-val'>5.33%</div>", unsafe_allow_html=True)
-    st.markdown("<div class='gold-ticker-label'>LSTA LEV LOAN INDEX</div>", unsafe_allow_html=True)
+    
+    with c_s: st.markdown("<div class='gold-ticker-label'>LSTA LEV LOAN INDEX</div>", unsafe_allow_html=True, help=TIPS["LSTA"])
     st.markdown("<div class='gold-ticker-val'>8.25%</div>", unsafe_allow_html=True)
     
     with st.expander("Admin Debug"):
@@ -190,35 +162,32 @@ with st.sidebar:
 if current_page == "Dashboard":
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        with st.container(): st.metric("Total AUM", "$1.45B", delta="3.2% vs Prev Qtr")
+        with st.container(): st.metric("Total AUM", "$1.45B", delta="3.2%", help=TIPS["AUM"])
     with m2:    
-        with st.container(): st.metric("Portfolio FMV", "$980M", delta="$15M Mark-Up")
+        with st.container(): st.metric("Portfolio FMV", "$980M", delta="$15M", help=TIPS["FMV"])
     with m3:
-        with st.container(): st.metric("Gross MOIC", "2.4x", delta="0.1x")
+        with st.container(): st.metric("Gross MOIC", "2.4x", delta="0.1x", help=TIPS["MOIC"])
     with m4:
-        with st.container(): st.metric("Blended Gross IRR", "22.8%", delta="-1.2%")
+        with st.container(): st.metric("Blended Gross IRR", "22.8%", delta="-1.2%", help=TIPS["IRR"])
         
     st.markdown("---")
-    
     left, right = st.columns([2, 1])
     with left:
         st.markdown("### Portfolio Performance Overview")
-        bar_x = ["Vintage 2022", "Vintage 2023", "Vintage 2024", "Vintage 2025"]
-        bar_y = [2.8, 1.9, 1.2, 1.05]
+        bar_x, bar_y = ["Vintage 2022", "Vintage 2023", "Vintage 2024", "Vintage 2025"], [2.8, 1.9, 1.2, 1.05]
         fig_bar = go.Figure([go.Bar(x=bar_x, y=bar_y, marker_color='#64ffda')])
         fig_bar.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", title="MOIC by Vintage", height=350)
         st.plotly_chart(fig_bar, use_container_width=True)
-        
     with right:
         st.markdown("### Alerts & Required Actions")
         with st.container():
-            st.error("🚨 **COVENANT BREACH:** Massive Dynamic Biotech FCCR dropped below 1.15x threshold. Action required by Workout Group.")
-            st.warning("⚠️ **SEC DEADLINE:** Globex Aerospace Form C-AR due in 4 days. Missing XBRL tags detected.")
-            st.info("ℹ️ **CAPITAL CALL:** Fund III quarterly capital call notices due to LP portal next Tuesday.")
+            st.error("🚨 **COVENANT BREACH:** Massive Dynamic Biotech FCCR dropped below 1.15x threshold.")
+            st.warning("⚠️ **SEC DEADLINE:** Globex Aerospace Form C-AR due in 4 days.")
+            st.info("ℹ️ **CAPITAL CALL:** Fund III quarterly capital call notices due to LP portal.")
 
 elif current_page == "Portfolio":
     st.markdown("## 📊 Active Strategy Positions")
-    st.caption("AlphaDesk Strict Schema Mode: Use the drag-and-drop ingestion engine to instantly append new holdings to the database.")
+    st.caption("AlphaDesk Strict Schema Mode: Drag-and-drop ingestion mapped to database.")
     
     up_col, stats_col = st.columns([3, 1])
     with up_col: st.file_uploader("📥 Drag & Drop Deal Ledger (CSV / Excel format compliant with standard mapping)", type=["csv", "xlsx"])
@@ -227,13 +196,11 @@ elif current_page == "Portfolio":
         st.success("✅ **SYSTEM CHECK:** Master Database Sync Active.")
         
     st.markdown("---")
-    
     df = generate_portfolio_df()
     def style_status(val):
         if val == "Active": return "color: #4ade80; font-weight: bold;"
         elif val == "Watch": return "color: #fbbf24; font-weight: bold;"
         return "color: #f87171; font-weight: bold;"
-        
     st.dataframe(df.style.map(style_status, subset=['Status']), use_container_width=True, hide_index=True)
 
 elif current_page == "LBO Model":
@@ -242,9 +209,9 @@ elif current_page == "LBO Model":
     
     i1, i2, i3, i4 = st.columns(4)
     rev        = i1.number_input("Current Revenue ($M)", value=100.0)
-    ebitda_mar = i2.number_input("EBITDA Margin (%)", value=20.0)
+    ebitda_mar = i2.number_input("EBITDA Margin (%)", value=20.0, help=TIPS["EBITDA"])
     entry_mult = i3.number_input("Entry EV/EBITDA", value=10.0)
-    lev_ratio  = i4.slider("Leverage (Debt/EBITDA)", 1.0, 7.0, 4.0, 0.5)
+    lev_ratio  = i4.slider("Leverage (Debt/EBITDA)", 1.0, 7.0, 4.0, 0.5, help=TIPS["LEV"])
     
     ebitda = rev * (ebitda_mar/100)
     entry_ev = ebitda * entry_mult
@@ -253,7 +220,7 @@ elif current_page == "LBO Model":
     
     st.markdown("---")
     o1, o2, o3, o4 = st.columns(4)
-    o1.metric("Initial EBITDA", f"${ebitda:.1f}M")
+    o1.metric("Initial EBITDA", f"${ebitda:.1f}M", help=TIPS["EBITDA"])
     o2.metric("Entry Enterprise Value", f"${entry_ev:.1f}M")
     o3.metric("Senior Term Loan (Debt)", f"${debt:.1f}M")
     o4.metric("Sponsor Equity Check", f"${equity:.1f}M")
@@ -278,8 +245,8 @@ elif current_page == "LBO Model":
     with r2:
         with st.container():
             st.markdown("#### Returns Matrix")
-            st.markdown(f"<h1 style='color:#64ffda;'>{moic:.2f}x MOIC</h1>", unsafe_allow_html=True)
-            st.markdown(f"<h2 style='color:#4ade80;'>{irr:.1f}% Gross IRR</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='color:#64ffda;' title='{TIPS['MOIC']}'>{moic:.2f}x MOIC</h1>", unsafe_allow_html=True)
+            st.markdown(f"<h2 style='color:#4ade80;' title='{TIPS['IRR']}'>{irr:.1f}% Gross IRR</h2>", unsafe_allow_html=True)
 
 elif current_page == "Secondary Exchange":
     st.markdown("## 🔄 Private Markets Order Book")
@@ -303,8 +270,10 @@ elif current_page == "Secondary Exchange":
             shares = st.number_input("Shares / Units", value=50000, step=5000)
             price = st.number_input("Limit Price ($)", value=106.50, step=0.50)
             st.markdown(f"**Notional:** ${(shares * price):,.2f}")
+            
+            # Agent 3: Safety Guardrail Injection
             if st.button("ROUTE TO DARK POOL", type="primary", use_container_width=True):
-                st.success("Limit order injected into ledger.")
+                execute_trade_modal("ACME", shares, price, tr_type)
                 
         with st.container():
             st.markdown("#### L2 Depth")
@@ -315,17 +284,55 @@ elif current_page == "Secondary Exchange":
             st.markdown("🟢 Bid: 105.75 x 100k")
 
 elif current_page == "Deal Pipeline":
-    st.markdown("## 📡 Pipeline & M&A Discovery")
+    st.markdown("## 📡 Pipeline & Retail Clarity Discovery")
     urls = harvester.discover_recent_deals()
-    for i in range(0, len(urls), 3):
-        cols = st.columns(3)
-        for j in range(3):
+    
+    with st.spinner("Scraping deal flow signatures..."):
+        for url in urls:
+            if url not in st.session_state.deals_cache:
+                st.session_state.deals_cache[url] = harvester.harvest(url)
+                
+    for i in range(0, len(urls), 2):
+        cols = st.columns(2)
+        for j in range(2):
             if i + j < len(urls):
+                url = urls[i+j]
+                deal = st.session_state.deals_cache[url]
                 with cols[j]:
                     with st.container():
-                        name = urls[i+j].split("/")[-1].replace("-", " ").title()
-                        st.markdown(f"### {get_logo_emoji(name)} {name}")
+                        st.markdown(f"### {get_logo_emoji(deal.company_name)} {deal.company_name}")
                         st.markdown("<span class='badge-active'>Phase: Diligence</span>", unsafe_allow_html=True)
+                        st.metric("Founder Integrity Score", f"{deal.founder_integrity_score} / 100", help="Evaluates historic exit success versus regulatory red-flag disclosures from Form C.")
+                        
+                        with st.expander("🔍 View Retail Visual Storyteller"):
+                            t1, t2 = st.columns(2)
+                            with t1:
+                                max_vel = 300_000
+                                val = min(deal.funding_velocity, max_vel)
+                                fig_gauge = go.Figure(go.Indicator(
+                                    mode = "gauge+number",
+                                    value = val,
+                                    title = {'text': "Deal Temperature", 'font': {'color': '#ccd6f6'}},
+                                    gauge = {
+                                        'axis': {'range': [None, max_vel], 'tickcolor': "#112240"},
+                                        'bar': {'color': "#64ffda"},
+                                        'steps': [
+                                            {'range': [0, 50000], 'color': "#1e293b"},
+                                            {'range': [50000, 150000], 'color': "#334155"},
+                                            {'range': [150000, max_vel], 'color': "#ef4444"}],
+                                    }
+                                ))
+                                fig_gauge.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=30, b=10, l=10, r=10), height=250)
+                                st.plotly_chart(fig_gauge, use_container_width=True)
+                            with t2:
+                                st.markdown("<div style='text-align:center; color:#ccd6f6; font-weight:600;'>Where is my money going?</div>", unsafe_allow_html=True)
+                                labels = list(deal.use_of_funds.keys())
+                                parents = ["Funding"] * len(labels)
+                                values = list(deal.use_of_funds.values())
+                                df_tree = pd.DataFrame({"Category": labels, "Parent": parents, "Value": values})
+                                fig_tree = px.treemap(df_tree, path=['Parent', 'Category'], values='Value', color='Value', color_continuous_scale='Blues')
+                                fig_tree.update_layout(template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", margin=dict(t=10, b=10, l=10, r=10), height=230)
+                                st.plotly_chart(fig_tree, use_container_width=True)
 
 else:
     st.markdown(f"## {current_page}")

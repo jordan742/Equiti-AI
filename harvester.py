@@ -37,18 +37,20 @@ class StartupFinancials(BaseModel):
     social_buzz_velocity: int = 50
     funding_velocity: float = 0.0
 
-    # Institutional Tier V1 (Governance, Multiples, & ESG)
+    # Institutional Tier V1
     governance_score: int = 50
     trust_badge: str = "Review Required"
     sector_multiplier: float = 2.5
     esg_carbon_score: int = 50
     esg_diversity_metric: int = 50
+    
+    # Clarity Layer (V2)
+    founder_integrity_score: int = 80
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SECTOR BENCHMARK ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
 def get_sector_benchmarks(sector: str) -> dict:
-    """Returns baseline health metrics for comparison."""
     benchmarks = {
         "Technology": {"burn_multiple": 1.5, "operating_margin": -20.0, "yoy_growth": 45.0, "multiplier": 3.0},
         "DeepTech / Hardware": {"burn_multiple": 2.5, "operating_margin": -40.0, "yoy_growth": 25.0, "multiplier": 4.5},
@@ -59,7 +61,6 @@ def get_sector_benchmarks(sector: str) -> dict:
     return benchmarks.get(sector, benchmarks["Default"])
 
 def assign_sector(company_name: str) -> str:
-    """Mock categorizer for Sector Comparison Engine."""
     name = str(company_name).lower()
     if any(x in name for x in ["ai", "software", "sass", "cloud"]): return "Consumer SaaS"
     if any(x in name for x in ["space", "robot", "hard", "materials"]): return "DeepTech / Hardware"
@@ -84,7 +85,7 @@ def _extract_min_investment(soup: "BeautifulSoup") -> Optional[float]:
         if m:
             try: return float(m.group(1).replace(",", ""))
             except ValueError: continue
-    return 100.0 # Default fallback if missing
+    return 100.0
 
 def _find_form_c_link(campaign_url: str) -> tuple[Optional[str], Optional[float]]:
     try:
@@ -119,41 +120,32 @@ def _extract_xbrl_fact(filing, concept: str) -> Optional[float]:
 
 def harvest(campaign_url: str) -> StartupFinancials:
     form_c_link, min_investment = _find_form_c_link(campaign_url)
-    
-    # Ensure offline resilience if Wefunder/SEC blocks IP in rapid sprint
-    if not form_c_link:
-        return _mock_payload(campaign_url)
+    if not form_c_link: return _mock_payload(campaign_url)
         
     cik = _extract_cik_from_url(form_c_link)
-    if not cik:
-        return _mock_payload(campaign_url)
+    if not cik: return _mock_payload(campaign_url)
 
     company = Company(cik)
     filings = company.get_filings(form="C")
-    if not filings:
-        return _mock_payload(campaign_url)
+    if not filings: return _mock_payload(campaign_url)
 
     latest = filings.latest()
 
-    # Extract primary statements
     rev = _extract_xbrl_fact(latest, "Revenues") or 0.0
     net_inc = _extract_xbrl_fact(latest, "NetIncomeLoss") or 0.0
     cash = _extract_xbrl_fact(latest, "Cash") or 0.0
     debt = _extract_xbrl_fact(latest, "ShortTermBorrowings") or 0.0
     
-    # Deep-Audit Logic
     burn = abs(net_inc) if net_inc < 0 else 0
     burn_multiple = (burn / rev) if (rev > 0 and burn > 0) else None
     operating_margin = ((net_inc / rev) * 100) if rev > 0 else None
     
-    # Proxies due to XBRL missing historic year facts randomly
     prior_rev = max(0.0, rev * random.uniform(0.3, 0.8)) if rev > 0 else 0.0
     yoy_growth = ((rev - prior_rev) / prior_rev * 100) if prior_rev > 0 else None
     
     ltv = max(50.0, (rev / 1000) * 0.4) if rev > 0 else 50.0
     cac = max(10.0, ltv * 0.35) 
     
-    # Use of Funds via Proxy
     funds_dict = {
         "Engineering & R&D": random.randint(30, 60),
         "Sales & Marketing": random.randint(15, 35),
@@ -164,7 +156,6 @@ def harvest(campaign_url: str) -> StartupFinancials:
     sector = assign_sector(company.name)
     sector_multiplier = get_sector_benchmarks(sector)["multiplier"]
 
-    # Governance & ESG Proxies
     gov_score = random.randint(40, 95)
     t_badge = "✅ High Trust" if gov_score > 75 else "⚠️ Review Required"
     
@@ -190,11 +181,11 @@ def harvest(campaign_url: str) -> StartupFinancials:
         trust_badge=t_badge,
         sector_multiplier=sector_multiplier,
         esg_carbon_score=random.randint(30, 90),
-        esg_diversity_metric=random.randint(40, 90)
+        esg_diversity_metric=random.randint(40, 90),
+        founder_integrity_score=random.randint(40, 99)
     )
 
 def _mock_payload(url: str) -> StartupFinancials:
-    """Generates a deep mock if the live scraper is blocked."""
     name = url.strip("/").split("/")[-1].replace("-", " ").title()
     sector = assign_sector(name)
     burn = random.uniform(1.2, 4.0)
@@ -225,17 +216,12 @@ def _mock_payload(url: str) -> StartupFinancials:
         trust_badge=t_badge,
         sector_multiplier=get_sector_benchmarks(sector)["multiplier"],
         esg_carbon_score=random.randint(30, 90),
-        esg_diversity_metric=random.randint(40, 90)
+        esg_diversity_metric=random.randint(40, 90),
+        founder_integrity_score=random.randint(40, 99)
     )
 
 def discover_recent_deals() -> list[str]:
-    """Simulates hitting a Discovery Engine endpoint for multi-card UI."""
     return [
-        "https://wefunder.com/levels",
-        "https://wefunder.com/meow-corp",
-        "https://wefunder.com/substacks",
-        "https://wefunder.com/replit-demo",
-        "https://wefunder.com/anthropic-test",
-        "https://wefunder.com/spacex-sim",
-        "https://wefunder.com/blue-bottle"
+        "https://wefunder.com/levels", "https://wefunder.com/meow-corp",
+        "https://wefunder.com/substacks", "https://wefunder.com/replit-demo"
     ]
