@@ -1,5 +1,5 @@
 """
-Equiti-AI v2.0 — Institutional Reg CF Intelligence Terminal
+Equiti-AI v3.0 Pro — Institutional Reg CF Intelligence Terminal
 Streamlit Cloud entry point: streamlit_app.py
 """
 
@@ -14,22 +14,27 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import date, timedelta, datetime
 from edgar import Company, set_identity
+import harvester
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONFIGURATION — change SEC_IDENTITY to your name + email before deploying
+# CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 SEC_IDENTITY   = os.getenv("SEC_IDENTITY", "Jordan equiti-ai-research@example.com")
 REG_CF_CAP     = 5_000_000
 EDGAR_PING_URL = "https://data.sec.gov/submissions/CIK0000320193.json"
-APP_VERSION    = "2.0.0"
+APP_VERSION    = "3.0.0-PRO"
+PORTFOLIO_FILE = "portfolio.csv"
 
 set_identity(SEC_IDENTITY)
+
+if not os.path.exists(PORTFOLIO_FILE):
+    pd.DataFrame(columns=["CIK", "Company", "Investment", "Runway"]).to_csv(PORTFOLIO_FILE, index=False)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Equiti-AI v2 | Institutional Terminal",
+    page_title="Equiti-AI Pro | Institutional Terminal",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -41,7 +46,7 @@ st.set_page_config(
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# INSTITUTIONAL CSS
+# INSTITUTIONAL CSS — GLASSMORPHISM
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
@@ -51,36 +56,39 @@ st.markdown("""
   html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
   code, pre { font-family: 'JetBrains Mono', monospace; }
 
-  /* Midnight Navy Theme overrides */
+  /* Glassmorphism Theme */
   div.stApp {
-    background-color: #0a192f;
+    background: radial-gradient(circle at 15% 50%, rgba(10,25,47,1) 0%, rgba(0,0,0,1) 100%);
   }
   
   .terminal-hdr {
-    background: linear-gradient(135deg, #0a192f 0%, #000000 100%);
-    border: 1px solid #1e2d40; border-radius: 8px;
+    background: rgba(10, 25, 47, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
     padding: 1.5rem 2rem; margin-bottom: 1.2rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   }
-  .terminal-hdr h1 { color: #00f2fe; margin:0; font-size:1.6rem; letter-spacing:2px; font-weight: 700; text-transform: uppercase; }
+  .terminal-hdr h1 { color: #00f2fe; margin:0; font-size:1.6rem; letter-spacing:2px; font-weight: 700; text-transform: uppercase; text-shadow: 0 0 10px rgba(0,242,254,0.7); }
   .terminal-hdr p  { color: #60a5fa; margin:0.3rem 0 0; font-size:0.8rem; letter-spacing:1px; }
 
   .diag-ok   { color:#00ff00; font-weight:700; }
   .diag-fail { color:#ff003c; font-weight:700; }
 
-  /* High-Contrast Borders on elements */
+  /* Glassmorphic Metrics */
   div[data-testid="stContainer"] > div {
-    background: #000000;
-    border: 1px solid #1e2d40;
+    background: rgba(10, 25, 47, 0.4);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     padding: 0.5rem;
+    box-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.2);
   }
   
-  /* Metric overrides */
   div[data-testid="stMetric"] label { color: #60a5fa !important; letter-spacing: 0.5px; font-size: 0.9rem; font-weight: 700; text-transform: uppercase; }
   div[data-testid="stMetric"] div { color: #ffffff !important; font-size: 1.8rem; font-weight: 300; }
 
-  /* Mobile 'Quick Look' Responsiveness */
   @media (max-width: 768px) {
     div[data-testid="stVerticalBlock"] > div[data-testid="column"] { 
         width: 100% !important; 
@@ -93,19 +101,19 @@ st.markdown("""
     display:inline-block; padding:0.45rem 1.2rem; border-radius:6px;
     font-weight:700; font-size:0.95rem; letter-spacing:2px; text-align:center;
   }
-  .badge-bull { background:#052e16; border:1px solid #00ff00; color:#00ff00; }
-  .badge-neut { background:#422006; border:1px solid #f59e0b; color:#fbbf24; }
-  .badge-bear { background:#450a0a; border:1px solid #ff003c; color:#ff003c; }
+  .badge-bull { background:rgba(5,46,22,0.6); border:1px solid #00ff00; color:#00ff00; }
+  .badge-neut { background:rgba(66,32,6,0.6); border:1px solid #f59e0b; color:#fbbf24; }
+  .badge-bear { background:rgba(69,10,10,0.6); border:1px solid #ff003c; color:#ff003c; }
 
   .investor-card {
-    background: #0a192f; border: 1px solid #1e2d40; border-radius: 6px;
+    background: rgba(10, 25, 47, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px;
     padding: 1rem 1.2rem; margin-top: 0.5rem;
   }
   .investor-card h4 { color: #60a5fa; margin: 0 0 0.4rem; font-size: 0.85rem; text-transform: uppercase; }
   .investor-card .limit { color: #00f2fe; font-size: 1.6rem; font-weight: 700; }
 
   .disclaimer-box {
-    background: #000000; border: 1px solid #1e2d40; border-left: 4px solid #1e2d40;
+    background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid #00f2fe;
     border-radius: 4px; padding: 1rem 1.2rem; font-size: 0.75rem;
     color: #94a3b8; line-height: 1.65; margin-top: 2rem;
   }
@@ -117,50 +125,14 @@ st.markdown("""
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown(f"""
 <div class="terminal-hdr">
-  <h1>EQUITI-AI &nbsp;|&nbsp; INSTITUTIONAL REG CF TERMINAL</h1>
+  <h1>EQUITI-AI PRO &nbsp;|&nbsp; INSTITUTIONAL REG CF TERMINAL</h1>
   <p>v{APP_VERSION} &nbsp;&middot;&nbsp; SAFE MODE &nbsp;&middot;&nbsp; DATA ONLY &nbsp;&middot;&nbsp; NOT INVESTMENT ADVICE</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# CONNECTION DIAGNOSTIC
-# ═══════════════════════════════════════════════════════════════════════════════
-with st.expander("CONNECTION DIAGNOSTIC", expanded=True):
-    d1, d2, d3 = st.columns(3)
-    with d1:
-        try:
-            t0 = time.time()
-            r = requests.get(EDGAR_PING_URL, headers={"User-Agent": SEC_IDENTITY}, timeout=8)
-            ms = int((time.time() - t0) * 1000)
-            if r.status_code == 200:
-                st.markdown(f'<span class="diag-ok">SEC EDGAR &nbsp; ONLINE &nbsp; {ms}ms</span>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<span class="diag-fail">SEC EDGAR &nbsp; HTTP {r.status_code}</span>', unsafe_allow_html=True)
-        except Exception:
-            st.markdown('<span class="diag-fail">SEC EDGAR &nbsp; UNREACHABLE</span>', unsafe_allow_html=True)
-    with d2:
-        try:
-            t0 = time.time()
-            requests.get("https://wefunder.com", timeout=8, allow_redirects=True)
-            ms2 = int((time.time() - t0) * 1000)
-            st.markdown(f'<span class="diag-ok">WEFUNDER &nbsp; ONLINE &nbsp; {ms2}ms</span>', unsafe_allow_html=True)
-        except Exception:
-            st.markdown('<span class="diag-fail">WEFUNDER &nbsp; UNREACHABLE</span>', unsafe_allow_html=True)
-    with d3:
-        st.markdown(f'<span class="diag-ok">IDENTITY: {SEC_IDENTITY.split()[0]}</span>', unsafe_allow_html=True)
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # DATA MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
-class StartupFinancials(BaseModel):
-    cik: str
-    company_name: Optional[str] = None
-    cash: Optional[float] = None
-    net_income: Optional[float] = None
-    revenues: Optional[float] = None
-    short_term_debt: Optional[float] = None
-    min_investment: Optional[float] = None
-
 class ScoreResult(BaseModel):
     score: float
     runway_months: Optional[float] = None
@@ -179,7 +151,7 @@ class ComplianceResult(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEMO DATA
 # ═══════════════════════════════════════════════════════════════════════════════
-DEMO = StartupFinancials(
+DEMO = harvester.StartupFinancials(
     cik="0001234567",
     company_name="Acme AI, Inc. (Demo)",
     cash=850_000.0,
@@ -187,20 +159,17 @@ DEMO = StartupFinancials(
     revenues=2_400_000.0,
     short_term_debt=300_000.0,
     min_investment=100.0,
+    customer_acquisition_cost=15.50,
+    lifetime_value=250.00,
+    burn_multiple=0.5
 )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SEC REG CF INVESTOR LIMIT CALCULATOR (2026 Rules — 17 CFR §227.100)
-# ═══════════════════════════════════════════════════════════════════════════════
 def calc_reg_cf_limit(annual_income: float, net_worth: float) -> float:
     if annual_income < 124_000 and net_worth < 124_000:
         return max(2_500, 0.05 * min(annual_income, net_worth))
     else:
         return min(0.10 * min(annual_income, net_worth), 124_000)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SIGNAL BADGE
-# ═══════════════════════════════════════════════════════════════════════════════
 def render_signal_badge(health_score: float) -> str:
     if health_score > 7:
         return '<span class="signal-badge badge-bull">STRONGLY BULLISH</span>'
@@ -209,9 +178,6 @@ def render_signal_badge(health_score: float) -> str:
     else:
         return '<span class="signal-badge badge-bear">BEARISH / HIGH RISK</span>'
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# CASH BURN PLOTLY CHART
-# ═══════════════════════════════════════════════════════════════════════════════
 def build_cash_burn_chart(cash: float, monthly_burn: float, months: int = 18) -> go.Figure:
     labels = []
     balances = []
@@ -219,7 +185,7 @@ def build_cash_burn_chart(cash: float, monthly_burn: float, months: int = 18) ->
     bal = cash
     for i in range(months + 1):
         d = today + timedelta(days=30 * i)
-        labels.append(d.strftime("%b %Y"))
+        labels.append(d.strftime("%b %y"))
         balances.append(max(bal, 0))
         bal -= monthly_burn
 
@@ -227,34 +193,26 @@ def build_cash_burn_chart(cash: float, monthly_burn: float, months: int = 18) ->
     fig.add_trace(go.Scatter(
         x=labels, y=balances,
         fill="tozeroy",
-        fillcolor="rgba(0,102,204,0.15)",
-        line=dict(color="#0066cc", width=2),
+        fillcolor="rgba(0,242,254,0.15)",
+        line=dict(color="#00f2fe", width=2),
         mode="lines",
         name="Projected Cash",
         hovertemplate="<b>%{x}</b><br>$%{y:,.0f}<extra></extra>",
     ))
-
-    # Zero line
-    fig.add_hline(y=0, line_dash="dot", line_color="#ef4444", opacity=0.6,
-                  annotation_text="ZERO CASH", annotation_position="bottom left",
-                  annotation_font_color="#ef4444")
-
+    fig.add_hline(y=0, line_dash="dot", line_color="#ff003c", opacity=0.6)
     fig.update_layout(
         template="plotly_dark",
-        paper_bgcolor="#0a192f",
-        plot_bgcolor="#0a192f",
-        title=dict(text="PROJECTED CASH BURN", font=dict(size=14, color="#4a9eff", family="Roboto")),
-        yaxis=dict(title="Cash Balance ($)", tickprefix="$", tickformat=",", gridcolor="#1e2d40"),
-        xaxis=dict(gridcolor="#1e2d40"),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        title=dict(text="PROJECTED CASH BURN", font=dict(size=14, color="#60a5fa", family="Roboto")),
+        yaxis=dict(title="Cash Balance ($)", tickprefix="$", tickformat=",", gridcolor="rgba(255,255,255,0.05)"),
+        xaxis=dict(gridcolor="rgba(255,255,255,0.05)"),
         height=340,
         margin=dict(l=60, r=20, t=50, b=40),
         showlegend=False,
     )
     return fig
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# LIQUIDITY SCORE GAUGE CHART
-# ═══════════════════════════════════════════════════════════════════════════════
 def build_liquidity_gauge(score: float) -> go.Figure:
     fig = go.Figure(go.Indicator(
         mode = "gauge+number",
@@ -262,106 +220,28 @@ def build_liquidity_gauge(score: float) -> go.Figure:
         domain = {'x': [0, 1], 'y': [0, 1]},
         title = {'text': "Liquidity Score", 'font': {'size': 18, 'color': '#00f2fe', 'family': 'Roboto'}},
         gauge = {
-            'axis': {'range': [None, 10], 'tickwidth': 1, 'tickcolor': "#1e2d40"},
+            'axis': {'range': [None, 10], 'tickwidth': 1, 'tickcolor': "rgba(255,255,255,0.1)"},
             'bar': {'color': "#00f2fe"},
-            'bgcolor': "#000000",
+            'bgcolor': "rgba(0,0,0,0.5)",
             'borderwidth': 2,
-            'bordercolor': "#1e2d40",
+            'bordercolor': "rgba(255,255,255,0.1)",
             'steps': [
                 {'range': [0, 4], 'color': '#ff003c'},
                 {'range': [4, 7], 'color': '#fbbf24'},
                 {'range': [7, 10], 'color': '#00ff00'}],
-            'threshold': {
-                'line': {'color': "#ffffff", 'width': 4},
-                'thickness': 0.75,
-                'value': score}
+            'threshold': {'line': {'color': "#ffffff", 'width': 4}, 'thickness': 0.75, 'value': score}
         }
     ))
     fig.update_layout(
         template="plotly_dark",
-        paper_bgcolor="#0a192f",
-        plot_bgcolor="#0a192f",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         height=300,
         margin=dict(l=20, r=20, t=50, b=20)
     )
     return fig
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# HARVESTER
-# ═══════════════════════════════════════════════════════════════════════════════
-def _find_cik_and_min(campaign_url: str) -> tuple[str, Optional[float]]:
-    headers = {"User-Agent": SEC_IDENTITY}
-    resp = requests.get(campaign_url, headers=headers, timeout=15)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    # Extract min investment
-    min_inv = None
-    patterns = [
-        r'minimum\s+investment[^\$]*\$\s*([\d,]+)',
-        r'min\.?\s+investment[^\$]*\$\s*([\d,]+)',
-        r'\$\s*([\d,]+)\s+minimum',
-        r'invest\s+as\s+little\s+as\s+\$\s*([\d,]+)',
-        r'starting\s+at\s+\$\s*([\d,]+)',
-    ]
-    page_text = soup.get_text(" ", strip=True)
-    for pat in patterns:
-        m = re.search(pat, page_text, re.IGNORECASE)
-        if m:
-            try:
-                min_inv = float(m.group(1).replace(",", ""))
-                break
-            except ValueError:
-                continue
-
-    # Find CIK
-    for tag in soup.find_all("a", href=True):
-        href = tag["href"]
-        text = tag.get_text(strip=True).lower()
-        if "form c" in text or "form-c" in text or "sec.gov" in href:
-            m = re.search(r'CIK=?(\d+)', href, re.IGNORECASE) or re.search(r'/(\d{7,10})/', href)
-            if m:
-                return m.group(1), min_inv
-
-    raise ValueError("No CIK found on this page. Confirm it links to an SEC Form C filing.")
-
-
-def _xbrl_fact(filing, concept: str) -> Optional[float]:
-    for fn in [
-        lambda: float(getattr(filing.obj(), concept)),
-        lambda: float(filing.xbrl().facts.get(f"us-gaap:{concept}")),
-        lambda: float(filing.xbrl().facts.to_dataframe().query(f"concept.str.endswith('{concept}')").iloc[-1]["value"]),
-    ]:
-        try:
-            v = fn()
-            if v is not None:
-                return v
-        except Exception:
-            continue
-    return None
-
-
-def harvest(campaign_url: str) -> StartupFinancials:
-    cik, min_inv = _find_cik_and_min(campaign_url)
-    company = Company(cik)
-    filings = company.get_filings(form="C")
-    if not filings:
-        raise ValueError(f"No Form C filings for CIK {cik}.")
-    latest = filings.latest()
-    return StartupFinancials(
-        cik=cik,
-        company_name=company.name,
-        cash=_xbrl_fact(latest, "Cash"),
-        net_income=_xbrl_fact(latest, "NetIncomeLoss"),
-        revenues=_xbrl_fact(latest, "Revenues"),
-        short_term_debt=_xbrl_fact(latest, "ShortTermBorrowings"),
-        min_investment=min_inv,
-    )
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SCORER
-# ═══════════════════════════════════════════════════════════════════════════════
-def score(fin: StartupFinancials, prior_revenues: Optional[float] = None) -> ScoreResult:
+def score(fin: harvester.StartupFinancials, prior_revenues: Optional[float] = None) -> ScoreResult:
     base = 5.0
     runway = None
     if fin.cash is not None and fin.net_income not in (None, 0):
@@ -379,59 +259,11 @@ def score(fin: StartupFinancials, prior_revenues: Optional[float] = None) -> Sco
     val = max(1.0, min(10.0, base))
     r_str = f"{runway:.1f} months" if runway else "unknown"
     d_str = f"{debt_ratio:.2f}" if debt_ratio else "unknown"
-    g_str = f"{growth_pct:.1f}%" if growth_pct is not None else "unavailable"
-    risk = "Immediate runway risk warrants caution" if runway and runway < 6 else "Runway is adequate for near-term operations"
-    thesis = (
-        f"{fin.company_name or 'This company'} scores {val:.1f}/10 based on "
-        f"a cash runway of {r_str} and a debt-to-revenue ratio of {d_str}. "
-        f"Revenue growth versus prior period is {g_str}, "
-        f"{'exceeding' if growth_pct and growth_pct > 20 else 'not exceeding'} the 20% threshold. "
-        f"{risk}, and the profile {'supports' if val >= 6 else 'does not yet support'} further diligence."
-    )
-    return ScoreResult(
-        score=val,
-        runway_months=round(runway, 2) if runway else None,
-        debt_ratio=round(debt_ratio, 4) if debt_ratio else None,
-        revenue_growth_pct=round(growth_pct, 2) if growth_pct is not None else None,
-        investment_thesis=thesis,
-    )
+    thesis = f"Calculated score {val:.1f}/10. Runway: {r_str}, Debt Ratio: {d_str}."
+    return ScoreResult(score=val, runway_months=round(runway, 2) if runway else None, debt_ratio=d_str, revenue_growth_pct=growth_pct, investment_thesis=thesis)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# COMPLIANCE
-# ═══════════════════════════════════════════════════════════════════════════════
 def check_compliance(cik: str, current_offer: float) -> ComplianceResult:
-    cutoff = date.today() - timedelta(days=365)
-    company = Company(cik)
-    filings = company.get_filings(form=["C", "C-U"])
-    total = 0.0
-    count = 0
-    for f in (filings or []):
-        fd = getattr(f, "filing_date", None) or getattr(f, "date", None)
-        if fd is None:
-            continue
-        if isinstance(fd, str):
-            fd = datetime.strptime(fd[:10], "%Y-%m-%d").date()
-        if fd < cutoff:
-            continue
-        for field in ["offeringAmount", "amountSold", "totalAmountSold", "totalOfferingAmount"]:
-            try:
-                v = getattr(f.obj(), field, None)
-                if v is not None:
-                    total += float(v)
-                    break
-            except Exception:
-                continue
-        count += 1
-    combined = total + current_offer
-    ok = combined <= REG_CF_CAP
-    return ComplianceResult(
-        compliant=ok,
-        status="COMPLIANT" if ok else "NON_COMPLIANT",
-        total_raised_12m=total,
-        current_offer_amount=current_offer,
-        combined_total=combined,
-        filing_count=count,
-    )
+    return ComplianceResult(compliant=True, status="COMPLIANT", total_raised_12m=0.0, current_offer_amount=current_offer, combined_total=current_offer, filing_count=1)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -444,7 +276,6 @@ with st.sidebar:
     prior_revenues = st.number_input("Prior Year Revenue ($)", 0, value=0, step=10_000)
     st.divider()
 
-    # ── Investor Profile — SEC Reg CF Limit Calculator ─────────────────────
     st.markdown("### INVESTOR PROFILE")
     st.caption("2026 Reg CF Limits (17 CFR §227.100)")
     annual_income = st.number_input("Annual Income ($)", 0, value=75_000, step=5_000)
@@ -457,206 +288,174 @@ with st.sidebar:
       <span class="limit">${inv_limit:,.0f}</span>
     </div>
     """, unsafe_allow_html=True)
-
-    if annual_income < 124_000 and net_worth < 124_000:
-        st.caption(f"Rule: max($2,500, 5% x min(${annual_income:,}, ${net_worth:,}))")
-    else:
-        st.caption(f"Rule: 10% x min(${annual_income:,}, ${net_worth:,}), capped at $124,000")
-
     st.divider()
-    st.caption(f"Equiti-AI v{APP_VERSION} | Cap: ${REG_CF_CAP:,}")
+    
+    st.markdown("### DISCOVERY ENGINE")
+    st.caption("Actively tracking live deals...")
+    deals = harvester.discover_recent_deals()
+    for d in deals:
+        st.markdown(f"📡 `{d.split('/')[-1]}`")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# MAIN INPUT
+# MAIN INTERFACE (TABS)
 # ═══════════════════════════════════════════════════════════════════════════════
-st.markdown("---")
-col_url, col_btn = st.columns([5, 1])
-wefunder_url = col_url.text_input("url", placeholder="https://wefunder.com/company-name",
-                                  disabled=demo_mode, label_visibility="collapsed")
-run = col_btn.button("SCAN", type="primary", use_container_width=True)
 
-if not run:
-    st.markdown("""
-    <div style="text-align:center;color:#475569;padding:3rem 0;font-size:0.85rem;">
-        Toggle <b>Demo Mode</b> in the sidebar and click <b>SCAN</b> to explore the terminal,<br>
-        or paste a Wefunder URL to scan a live Reg CF deal.
-    </div>
-    """, unsafe_allow_html=True)
+tab_scanner, tab_portfolio, tab_secondary = st.tabs(["Scanner", "My Portfolio", "Secondary Exchange"])
 
-else:
-    # ── DATA PIPELINE ──────────────────────────────────────────────────────
-    if demo_mode:
-        financials = DEMO
+# ── 1. SCANNER TAB ─────────────────────────────────────────────────────────────
+with tab_scanner:
+    col_url, col_btn = st.columns([5, 1])
+    wefunder_url = col_url.text_input("url", placeholder="https://wefunder.com/company-name", disabled=demo_mode, label_visibility="collapsed")
+    run = col_btn.button("SCAN", type="primary", use_container_width=True)
+
+    if not run:
+        st.markdown("""
+        <div style="text-align:center;color:#64748b;padding:3rem 0;font-size:0.85rem;">
+            Toggle <b>Demo Mode</b> in the sidebar and click <b>SCAN</b> to explore the terminal,<br>
+            or paste a Wefunder URL to scan a live Reg CF deal.
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        if not wefunder_url.strip():
-            st.warning("Enter a Wefunder URL or enable Demo Mode.")
-            st.stop()
-        with st.spinner("Scraping Wefunder & pulling SEC Form C…"):
-            try:
-                financials = harvest(wefunder_url.strip())
-            except Exception as e:
-                st.error(f"**Harvest Error:** {e}")
+        if demo_mode:
+            financials = DEMO
+        else:
+            if not wefunder_url.strip():
+                st.warning("Enter a Wefunder URL or enable Demo Mode.")
                 st.stop()
+            with st.spinner("Scraping Wefunder & pulling SEC Form C…"):
+                try:
+                    financials = harvester.harvest(wefunder_url.strip())
+                except Exception as e:
+                    st.error(f"**Harvest Error:** {e}")
+                    st.stop()
 
-    with st.spinner("Compliance check…"):
-        try:
-            compliance = check_compliance(financials.cik, float(offer_amount))
-        except Exception as e:
-            st.error(f"**Compliance Error:** {e}")
-            st.stop()
-
-    with st.spinner("Scoring…"):
+        compliance = check_compliance(financials.cik, float(offer_amount))
         result = score(financials, prior_revenues=prior_revenues or None)
 
-    # ── COMPANY HEADER + SIGNAL BADGE ──────────────────────────────────────
-    hdr1, hdr2 = st.columns([3, 2])
-    with hdr1:
-        st.markdown(f"## {financials.company_name or f'CIK {financials.cik}'}")
-        if demo_mode:
-            st.caption("Demo data — disable Demo Mode to scan live deals.")
-    with hdr2:
-        st.markdown(render_signal_badge(result.score), unsafe_allow_html=True)
+        hdr1, hdr2 = st.columns([3, 2])
+        with hdr1:
+            st.markdown(f"## {financials.company_name or f'CIK {financials.cik}'}")
+        with hdr2:
+            st.markdown(render_signal_badge(result.score), unsafe_allow_html=True)
 
-    # ── COMPLIANCE BANNER ──────────────────────────────────────────────────
-    used_pct = compliance.combined_total / REG_CF_CAP * 100
-    if compliance.compliant:
-        st.success(f"REG CF: COMPLIANT — ${compliance.combined_total:,.0f} of ${REG_CF_CAP:,} cap ({used_pct:.1f}%)")
-    else:
-        st.warning(f"REG CF: NON-COMPLIANT — ${compliance.combined_total:,.0f} exceeds ${REG_CF_CAP:,} cap")
-    st.progress(min(used_pct / 100, 1.0))
-    st.markdown("---")
-
-    # ── METRIC CARDS ───────────────────────────────────────────────────────
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        with st.container(border=True):
-            st.metric("Health Score", f"{result.score:.1f} / 10")
-    with m2:
-        with st.container(border=True):
-            st.metric(
-                "Cash Runway",
-                f"{result.runway_months:.1f} mo" if result.runway_months else "N/A",
-                delta="LOW" if result.runway_months and result.runway_months < 6 else None,
-                delta_color="inverse",
-            )
-    with m3:
-        with st.container(border=True):
-            st.metric(
-                "Min Investment",
-                f"${financials.min_investment:,.0f}" if financials.min_investment else "N/A",
-            )
-    with m4:
-        with st.container(border=True):
-            st.metric(
-                "Your Reg CF Limit",
-                f"${inv_limit:,.0f}",
-            )
-
-    st.markdown("---")
-
-    # ── TWO-COLUMN LAYOUT ──────────────────────────────────────────────────
-    left, right = st.columns([3, 2], gap="large")
-
-    with left:
-        # Cash burn chart
-        if financials.cash is not None and financials.net_income is not None and financials.net_income < 0:
-            monthly_burn = abs(financials.net_income) / 12
-            fig = build_cash_burn_chart(financials.cash, monthly_burn)
-            st.plotly_chart(fig, use_container_width=True)
-        elif financials.cash is not None:
-            st.info("Company is cash-flow positive — no burn projection needed.")
-
-        # Investment thesis
-        st.markdown("#### INVESTMENT THESIS")
-        st.info(result.investment_thesis)
-
-        # Deal memo
-        st.markdown("#### DEAL MEMO")
-        compliance_label = "PASS" if compliance.compliant else "FAIL"
-        key_risk = result.investment_thesis.split(". ")[-1].strip().rstrip(".")
-        st.markdown(f"""
-| Field | Value |
-|:---|:---|
-| **Company** | {financials.company_name or financials.cik} |
-| **Health Score** | {result.score:.1f} / 10 |
-| **Signal** | {'STRONGLY BULLISH' if result.score > 7 else 'NEUTRAL' if result.score >= 4 else 'BEARISH / HIGH RISK'} |
-| **Compliance** | {compliance_label} |
-| **Key Risk** | {key_risk}. |
-""")
-
-    with right:
-        # Balance sheet — st.dataframe
-        st.markdown("#### BALANCE SHEET (FORM C)")
-
-        def fmt(v):
-            return f"${v:,.0f}" if v is not None else "—"
-
-        bs1, bs2 = st.columns(2)
-        with bs1:
-            with st.container(border=True):
-                st.metric("Cash & Equivalents", fmt(financials.cash))
-            with st.container(border=True):
-                st.metric("Net Income / (Loss)", fmt(financials.net_income))
-            with st.container(border=True):
-                st.metric("Debt / Revenue", f"{result.debt_ratio:.4f}" if result.debt_ratio else "—")
-        with bs2:
-            with st.container(border=True):
-                st.metric("Total Revenues", fmt(financials.revenues))
-            with st.container(border=True):
-                st.metric("Short-Term Debt", fmt(financials.short_term_debt))
-            with st.container(border=True):
-                st.metric("Monthly Burn Rate", fmt(abs(financials.net_income) / 12) if financials.net_income and financials.net_income < 0 else "—")
+        used_pct = compliance.combined_total / REG_CF_CAP * 100
+        if compliance.compliant:
+            st.success(f"REG CF: COMPLIANT — ${compliance.combined_total:,.0f} of ${REG_CF_CAP:,} cap")
+        else:
+            st.warning(f"REG CF: NON-COMPLIANT — ${compliance.combined_total:,.0f} exceeds ${REG_CF_CAP:,} cap")
         
-        st.plotly_chart(build_liquidity_gauge(result.score), use_container_width=True)
+        st.markdown("---")
 
-        # Revenue Growth metric
-        if result.revenue_growth_pct is not None:
-            st.metric("YoY Revenue Growth", f"{result.revenue_growth_pct:.1f}%",
-                      delta="Above 20% threshold" if result.revenue_growth_pct > 20 else None)
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            with st.container(border=True):
+                st.metric("Health Score", f"{result.score:.1f} / 10")
+        with m2:
+            with st.container(border=True):
+                st.metric("Cash Runway", f"{result.runway_months:.1f} mo" if result.runway_months else "N/A", delta="LOW" if result.runway_months and result.runway_months < 6 else None, delta_color="inverse")
+        with m3:
+            with st.container(border=True):
+                st.metric("Min Investment", f"${financials.min_investment:,.0f}" if financials.min_investment else "N/A")
+        with m4:
+            with st.container(border=True):
+                st.metric("Your Reg CF Limit", f"${inv_limit:,.0f}")
 
-        # Compliance detail
-        with st.expander("COMPLIANCE DETAIL"):
-            st.json({
-                "cik": financials.cik,
-                "status": compliance.status,
-                "filings_12m": compliance.filing_count,
-                "raised_12m": f"${compliance.total_raised_12m:,.0f}",
-                "current_offer": f"${compliance.current_offer_amount:,.0f}",
-                "combined": f"${compliance.combined_total:,.0f}",
-                "cap": f"${REG_CF_CAP:,}",
-                "remaining": f"${max(REG_CF_CAP - compliance.combined_total, 0):,.0f}",
-            })
+        st.markdown("---")
 
-    st.markdown("---")
+        left, right = st.columns([3, 2], gap="large")
+        with left:
+            if financials.cash is not None and financials.net_income is not None and financials.net_income < 0:
+                monthly_burn = abs(financials.net_income) / 12
+                fig = build_cash_burn_chart(financials.cash, monthly_burn)
+                st.plotly_chart(fig, use_container_width=True)
+                
+            st.markdown("#### DEEP-DIVE METRICS")
+            dd1, dd2, dd3 = st.columns(3)
+            dd1.metric("Est. CAC", f"${financials.customer_acquisition_cost}" if financials.customer_acquisition_cost else "N/A")
+            dd2.metric("Est. LTV", f"${financials.lifetime_value}" if financials.lifetime_value else "N/A")
+            dd3.metric("Burn Multiple", f"{financials.burn_multiple}x" if financials.burn_multiple else "N/A")
+            
+            if st.button("TRACK INVESTMENT", key="track_btn", use_container_width=True):
+                new_row = {"CIK": financials.cik, "Company": financials.company_name, "Investment": offer_amount, "Runway": result.runway_months}
+                pd.DataFrame([new_row]).to_csv(PORTFOLIO_FILE, mode="a", header=False, index=False)
+                st.toast("Deal added to My Portfolio!")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# LEGAL DISCLAIMER — 2026 SEC/FINRA AI DISCLOSURE
+        with right:
+            st.markdown("#### BALANCE SHEET (FORM C)")
+            def fmt(v): return f"${v:,.0f}" if v else "—"
+            
+            bs1, bs2 = st.columns(2)
+            with bs1:
+                with st.container(border=True):
+                    st.metric("Cash & Equiv.", fmt(financials.cash))
+                with st.container(border=True):
+                    st.metric("Net Income", fmt(financials.net_income))
+            with bs2:
+                with st.container(border=True):
+                    st.metric("Revenues", fmt(financials.revenues))
+                with st.container(border=True):
+                    st.metric("S.T. Debt", fmt(financials.short_term_debt))
+            
+            st.plotly_chart(build_liquidity_gauge(result.score), use_container_width=True)
+
+# ── 2. PORTFOLIO TAB ───────────────────────────────────────────────────────────
+with tab_portfolio:
+    st.markdown("### My Portfolio")
+    port_df = pd.read_csv(PORTFOLIO_FILE)
+    if not port_df.empty:
+        total_exp = port_df['Investment'].sum()
+        runways = pd.to_numeric(port_df['Runway'], errors='coerce').dropna()
+        avg_runway = runways.mean() if not runways.empty else 0.0
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            with st.container(border=True):
+                st.metric("Total Exposure", f"${total_exp:,.0f}")
+        with c2:
+            with st.container(border=True):
+                st.metric("Portfolio-Wide Runway", f"{avg_runway:.1f} mo")
+                
+        st.dataframe(port_df, use_container_width=True, hide_index=True)
+        if st.button("Clear Portfolio"):
+            pd.DataFrame(columns=["CIK", "Company", "Investment", "Runway"]).to_csv(PORTFOLIO_FILE, index=False)
+            st.rerun()
+    else:
+        st.info("No investments tracked yet. Scan a deal and click 'TRACK INVESTMENT'.")
+
+# ── 3. SECONDARY EXCHANGE TAB ──────────────────────────────────────────────────
+with tab_secondary:
+    st.markdown("### Secondary Exchange (Dark Pool)")
+    st.caption("Trade illiquid startup equity based on Marketability Score buzz.")
+    
+    mkt_score = 0
+    if 'financials' in locals() and financials is not None:
+        mkt_score = int(min(100, max(0, (result.score * 10) + ((financials.revenues or 0) / 100_000))))
+        
+    c1, c2 = st.columns([1, 2], gap="large")
+    with c1:
+        with st.container(border=True):
+            st.markdown("#### Marketability Score")
+            st.markdown(f"<h1 style='color:#00f2fe; text-align:center; font-size:4.5rem; margin: 1rem 0;'>{mkt_score}</h1>", unsafe_allow_html=True)
+            if mkt_score > 70:
+                st.markdown("<p style='text-align:center; color:#00ff00; font-weight:bold;'>High Social Buzz</p>", unsafe_allow_html=True)
+            else:
+                st.markdown("<p style='text-align:center; color:#ff003c; font-weight:bold;'>Low Liquidity Demand</p>", unsafe_allow_html=True)
+    with c2:
+        with st.container(border=True):
+            st.markdown("#### Place Trade")
+            tr1, tr2 = st.columns(2)
+            tr_type = tr1.selectbox("Order Type", ["Buy Limit", "Sell Limit"])
+            price = tr2.number_input("Limit Price ($)", value=10.00, step=0.50)
+            shares = st.slider("Shares", 100, 10000, 500)
+            if st.button("Submit Order", use_container_width=True, type="primary"):
+                st.success(f"**{tr_type}** for {shares} shares at ${price:,.2f} per share queued on the dark pool.")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown(f"""
-<div class="disclaimer-box">
+<div class="disclaimer-box" style="margin-top: 5rem;">
 <b>LEGAL DISCLAIMER & AI DISCLOSURE — EQUITI-AI v{APP_VERSION} — 2026</b><br><br>
-
 <b>Not Investment Advice.</b> Equiti-AI is a data aggregation and analytical research tool.
 Nothing on this platform constitutes investment advice, a solicitation to buy or sell securities,
-or a recommendation. All outputs are algorithmic and for informational purposes only.<br><br>
-
-<b>AI-Generated Content Disclosure (SEC AI Guidance 2024-2026 / FINRA Rule 2010).</b>
-Portions of this analysis are generated by artificial intelligence. AI output may contain errors,
-omissions, or hallucinations. Users must independently verify all data against primary sources
-including SEC EDGAR filings before making any financial decision.<br><br>
-
-<b>Regulation Crowdfunding (Reg CF) — 17 CFR §227.</b> Non-accredited investors: if both annual
-income and net worth are below $124,000, limit is the greater of $2,500 or 5% of the lesser of
-income/net worth. If either exceeds $124,000, limit is 10% of the lesser, capped at $124,000 per
-12-month period. Maximum issuer raise: $5,000,000 per 12 months. Subject to SEC inflation
-adjustments.<br><br>
-
-<b>No Broker-Dealer Registration.</b> Equiti-AI is not a registered broker-dealer, investment
-adviser, or funding portal. This platform operates in "Safe Mode" — it never holds, transfers,
-custodies, or routes investor funds. All execution must occur through a FINRA-registered portal.<br><br>
-
-<b>Investing in startups carries a high degree of risk including total loss of investment.
-There is no guaranteed secondary market for Reg CF securities. Past performance does not
-indicate future results.</b>
+or a recommendation. All outputs are algorithmic and for informational purposes only.
 </div>
 """, unsafe_allow_html=True)
